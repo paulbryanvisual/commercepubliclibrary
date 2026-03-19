@@ -1,0 +1,124 @@
+{
+  "events": [
+    {
+      "id": "evt-001",
+      "title": "Preschool Story Time",
+      "date": "2026-03-21",
+      "startTime": "10:00 AM",
+      "endTime": "11:00 AM",
+      "description": "Stories, songs, and crafts for ages 3-6. Parents welcome!",
+      "audience": "kids",
+      "location": "Children's Room",
+      "recurring": "weekly",
+      "cancelled": false,
+      "createdAt": "2026-03-01T00:00:00.000Z",
+      "updatedAt": "2026-03-01T00:00:00.000Z"
+    },
+    {
+      "id": "evt-002",
+      "title": "GED Tutoring",
+      "date": "2026-03-18",
+      "startTime": "10:00 AM",
+      "endTime": "12:00 PM",
+      "description": "Free GED preparation with volunteer tutors. Drop in anytime.",
+      "audience": "adults",
+      "location": "Meeting Room A",
+      "recurring": "weekly",
+      "cancelled": false,
+      "createdAt": "2026-03-01T00:00:00.000Z",
+      "updatedAt": "2026-03-01T00:00:00.000Z"
+    },
+    {
+      "id": "evt-003",
+      "title": "Lego Club",
+      "date": "2026-03-19",
+      "startTime": "3:30 PM",
+      "endTime": "4:30 PM",
+      "description": "Build, create, and imagine with our huge Lego collection. Ages 5-12.",
+      "audience": "kids",
+      "location": "Children's Room",
+      "recurring": "weekly",
+      "cancelled": false,
+      "createdAt": "2026-03-01T00:00:00.000Z",
+      "updatedAt": "2026-03-01T00:00:00.000Z"
+    },
+    {
+      "id": "evt-004",
+      "title": "Adult Book Club",
+      "date": "2026-03-20",
+      "startTime": "6:00 PM",
+      "endTime": "7:30 PM",
+      "description": "This month: 'The Women' by Kristin Hannah. New members welcome.",
+      "audience": "adults",
+      "location": "Meeting Room B",
+      "recurring": "monthly",
+      "cancelled": false,
+      "createdAt": "2026-03-01T00:00:00.000Z",
+      "updatedAt": "2026-03-01T00:00:00.000Z"
+    },
+    {
+      "id": "evt-005",
+      "title": "Teen Art Studio",
+      "date": "2026-03-21",
+      "startTime": "4:00 PM",
+      "endTime": "5:30 PM",
+      "description": "Mixed media art workshop for teens. All materials provided.",
+      "audience": "teens",
+      "location": "Teen Space",
+      "recurring": "weekly",
+      "cancelled": false,
+      "createdAt": "2026-03-01T00:00:00.000Z",
+      "updatedAt": "2026-03-01T00:00:00.000Z"
+    }
+  ],
+  "announcements": [
+    {
+      "id": "ann-001",
+      "title": "Summer Reading Program Registration Opens April 1",
+      "body": "Get ready for our biggest Summer Reading Program yet! Registration opens April 1 for all ages. Prizes, events, and reading challenges all summer long.",
+      "type": "news",
+      "startsAt": "2026-03-15T00:00:00.000Z",
+      "expiresAt": "2026-04-01T00:00:00.000Z",
+      "pinned": true,
+      "createdAt": "2026-03-15T00:00:00.000Z",
+      "updatedAt": "2026-03-15T00:00:00.000Z"
+    },
+    {
+      "id": "ann-002",
+      "title": "New Self-Checkout Kiosks Available",
+      "body": "We've installed two new self-checkout kiosks near the front entrance. Check out books, DVDs, and more in seconds! Staff are happy to help if you need assistance.",
+      "type": "news",
+      "startsAt": "2026-03-10T00:00:00.000Z",
+      "pinned": false,
+      "createdAt": "2026-03-10T00:00:00.000Z",
+      "updatedAt": "2026-03-10T00:00:00.000Z"
+    }
+  ],
+  "staffPicks": [
+    {
+      "id": "pick-001",
+      "title": "The Women",
+      "author": "Kristin Hannah",
+      "isbn": "9781250178633",
+      "staffName": "Sarah",
+      "review": "A powerful and emotional story about women who served in Vietnam. Kristin Hannah at her best -- you won't be able to put it down.",
+      "category": "fiction",
+      "createdAt": "2026-03-01T00:00:00.000Z",
+      "updatedAt": "2026-03-01T00:00:00.000Z"
+    },
+    {
+      "id": "pick-002",
+      "title": "Atomic Habits",
+      "author": "James Clear",
+      "isbn": "9780735211292",
+      "staffName": "Marcus",
+      "review": "Practical and science-backed strategies for building good habits and breaking bad ones. A must-read for anyone looking to make lasting changes.",
+      "category": "non_fiction",
+      "createdAt": "2026-03-05T00:00:00.000Z",
+      "updatedAt": "2026-03-05T00:00:00.000Z"
+    }
+  ],
+  "closures": [],
+  "hoursOverrides": [],
+  "pageContent": {}
+}
