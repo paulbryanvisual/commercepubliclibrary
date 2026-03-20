@@ -259,6 +259,33 @@ export async function sendLibraryCardStaffNotification(details: LibraryCardStaff
   await notifyStaff("New Library Card Application", emailWrapper(staffBody));
 }
 
+export async function sendPasswordResetEmail(to: string, displayName: string, resetToken: string) {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://commerce-library.vercel.app";
+  const resetUrl = `${siteUrl}/admin?reset=${resetToken}`;
+
+  const body = `
+    <h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#085041;">Password Reset Request</h2>
+    <p style="margin:0 0 24px;font-size:15px;color:#73726c;line-height:1.6;">
+      Hi ${displayName}, we received a request to reset your admin password. Click the button below to set a new password.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+      <tr><td align="center">
+        <a href="${resetUrl}" style="display:inline-block;background:#534AB7;color:#ffffff;padding:14px 32px;border-radius:12px;font-size:15px;font-weight:600;text-decoration:none;">
+          Reset Password
+        </a>
+      </td></tr>
+    </table>
+    <p style="margin:0 0 8px;font-size:13px;color:#A3A29E;">
+      Or copy this link: <a href="${resetUrl}" style="color:#1D9E75;word-break:break-all;">${resetUrl}</a>
+    </p>
+    <p style="margin:0;font-size:13px;color:#A3A29E;">
+      This link expires in 1 hour. If you didn't request this, you can safely ignore this email.
+    </p>
+  `;
+
+  return sendEmail(to, "Password Reset — Commerce Public Library Admin", emailWrapper(body));
+}
+
 export async function sendEventRegistration(to: string, details: EventRegistrationDetails) {
   const body = `
     <h2 style="margin:0 0 8px;font-size:22px;font-weight:600;color:#085041;">You're Registered!</h2>

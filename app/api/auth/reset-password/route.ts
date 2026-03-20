@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createResetToken,
   resetPasswordWithToken,
+  getUserByUsername,
 } from "@/lib/auth/adminAuth";
+import { sendPasswordResetEmail } from "@/lib/email/resend";
 
 /**
  * POST /api/auth/reset-password
  *
  * Two modes:
- * 1. { username } → generates a reset token (displayed to the user for now; email later)
+ * 1. { username } → generates a reset token and emails the reset link
  * 2. { token, newPassword } → resets the password using the token
  */
 export async function POST(request: NextRequest) {
@@ -42,22 +44,32 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Mode 1: Request reset token
+  // Mode 1: Request reset — send email
   if (body.username) {
-    const token = await createResetToken(body.username);
-    if (!token) {
+    const user = await getUserByUsername(body.username);
+
+    if (!user || !user.email) {
       // Don't reveal if user exists or not
       return NextResponse.json({
         ok: true,
-        message: "If that account exists, a reset token has been generated.",
+        message: "If that account exists and has an email on file, a reset link has been sent.",
       });
     }
 
-    // In production, this would be emailed. For now, return it directly.
+    const token = await createResetToken(body.username);
+    if (!token) {
+      return NextResponse.json({
+        ok: true,
+        message: "If that account exists and has an email on file, a reset link has been sent.",
+      });
+    }
+
+    // Send the reset email
+    await sendPasswordResetEmail(user.email, user.displayName, token);
+
     return NextResponse.json({
       ok: true,
-      message: "Reset token generated. Use it to set a new password.",
-      resetToken: token,
+      message: `A password reset link has been sent to ${user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3")}.`,
     });
   }
 

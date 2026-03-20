@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, Suspense, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 
 const AdminChat = dynamic(() => import("@/components/ai/AdminChat"), {
@@ -27,7 +28,7 @@ interface AdminUser {
 
 type View = "login" | "reset-request" | "reset-confirm";
 
-export default function AdminPage() {
+function AdminPageInner() {
   const [user, setUser] = useState<AdminUser | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
@@ -44,9 +45,16 @@ export default function AdminPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [resetMessage, setResetMessage] = useState("");
+  const searchParams = useSearchParams();
 
-  /* Check existing session on mount */
+  /* Check for reset token in URL and existing session on mount */
   useEffect(() => {
+    const resetParam = searchParams.get("reset");
+    if (resetParam) {
+      setResetToken(resetParam);
+      setView("reset-confirm");
+    }
+
     (async () => {
       try {
         const res = await fetch("/api/auth/admin-session", { method: "GET" });
@@ -60,7 +68,7 @@ export default function AdminPage() {
         setIsCheckingSession(false);
       }
     })();
-  }, []);
+  }, [searchParams]);
 
   /* Handle login */
   const handleLogin = async (e: FormEvent) => {
@@ -360,7 +368,7 @@ export default function AdminPage() {
               </div>
               <h2 className="text-lg font-semibold text-gray-800">Reset Password</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Enter your username to get a reset token.
+                Enter your username and we&apos;ll email you a reset link.
               </p>
             </div>
 
@@ -408,7 +416,7 @@ export default function AdminPage() {
                 disabled={isSubmitting || !resetUsername}
                 className="w-full rounded-xl bg-purple py-2.5 text-sm font-semibold text-white hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isSubmitting ? "Generating..." : "Generate Reset Token"}
+                {isSubmitting ? "Sending..." : "Send Reset Link"}
               </button>
             </form>
 
@@ -526,5 +534,25 @@ export default function AdminPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="flex items-center gap-2 text-gray-400">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+            <span className="text-sm">Loading...</span>
+          </div>
+        </div>
+      }
+    >
+      <AdminPageInner />
+    </Suspense>
   );
 }
