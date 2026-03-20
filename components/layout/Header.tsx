@@ -1,19 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { navLinks } from "@/lib/siteConfig";
-import StatusPill from "@/components/ui/StatusPill";
 import Logo from "@/components/ui/Logo";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [servicesOpen, setServicesOpen] = useState(false);
+  const [mobileServicesOpen, setMobileServicesOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setServicesOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   return (
@@ -24,19 +37,14 @@ export default function Header() {
       role="banner"
     >
       <div className="mx-auto flex max-w-site items-center justify-between px-4 md:px-8">
-        {/* Logo & status */}
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="hover:opacity-90 transition-opacity"
-            aria-label="Commerce Public Library — Home"
-          >
-            <Logo size={scrolled ? "sm" : "md"} />
-          </Link>
-          <div className="hidden sm:block">
-            <StatusPill />
-          </div>
-        </div>
+        {/* Logo */}
+        <Link
+          href="/"
+          className="hover:opacity-90 transition-opacity shrink-0"
+          aria-label="Commerce Public Library — Home"
+        >
+          <Logo size={scrolled ? "sm" : "md"} />
+        </Link>
 
         {/* Desktop nav */}
         <nav
@@ -44,15 +52,63 @@ export default function Header() {
           role="navigation"
           aria-label="Main navigation"
         >
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="rounded-lg px-3 py-2 text-[13px] font-medium text-gray-600 hover:bg-primary-light hover:text-primary-dark transition-colors"
-            >
-              {link.label}
-            </Link>
-          ))}
+          {navLinks.map((link) =>
+            link.children ? (
+              /* Services dropdown */
+              <div key={link.href} className="relative" ref={dropdownRef}>
+                <button
+                  onClick={() => setServicesOpen(!servicesOpen)}
+                  onMouseEnter={() => setServicesOpen(true)}
+                  className={`flex items-center gap-1 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
+                    servicesOpen
+                      ? "bg-primary-light text-primary-dark"
+                      : "text-gray-600 hover:bg-primary-light hover:text-primary-dark"
+                  }`}
+                  aria-expanded={servicesOpen}
+                  aria-haspopup="true"
+                >
+                  {link.label}
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    className={`transition-transform ${servicesOpen ? "rotate-180" : ""}`}
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+
+                {servicesOpen && (
+                  <div
+                    className="absolute top-full left-0 mt-1 w-56 rounded-xl border border-gray-200 bg-white py-2 shadow-lg shadow-black/8 animate-fade-in"
+                    onMouseLeave={() => setServicesOpen(false)}
+                  >
+                    {link.children.map((child) => (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className="block px-4 py-2.5 text-[13px] font-medium text-gray-600 hover:bg-primary-light hover:text-primary-dark transition-colors"
+                        onClick={() => setServicesOpen(false)}
+                      >
+                        {child.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="rounded-lg px-3 py-2 text-[13px] font-medium text-gray-600 hover:bg-primary-light hover:text-primary-dark transition-colors"
+              >
+                {link.label}
+              </Link>
+            )
+          )}
         </nav>
 
         {/* Header utilities */}
@@ -115,20 +171,52 @@ export default function Header() {
           aria-label="Mobile navigation"
         >
           <div className="mx-auto max-w-site px-4 py-4 space-y-1">
-            {/* Status pill on mobile */}
-            <div className="px-4 pb-3">
-              <StatusPill />
-            </div>
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="block rounded-lg px-4 py-3 text-base font-medium text-gray-700 hover:bg-primary-light hover:text-primary-dark transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {navLinks.map((link) =>
+              link.children ? (
+                <div key={link.href}>
+                  <button
+                    onClick={() => setMobileServicesOpen(!mobileServicesOpen)}
+                    className="flex w-full items-center justify-between rounded-lg px-4 py-3 text-base font-medium text-gray-700 hover:bg-primary-light hover:text-primary-dark transition-colors"
+                  >
+                    {link.label}
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className={`transition-transform ${mobileServicesOpen ? "rotate-180" : ""}`}
+                    >
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {mobileServicesOpen && (
+                    <div className="ml-4 space-y-1 border-l-2 border-primary-light pl-3">
+                      {link.children.map((child) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          className="block rounded-lg px-4 py-2.5 text-[15px] font-medium text-gray-600 hover:bg-primary-light hover:text-primary-dark transition-colors"
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="block rounded-lg px-4 py-3 text-base font-medium text-gray-700 hover:bg-primary-light hover:text-primary-dark transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              )
+            )}
             <hr className="my-2 border-gray-200" />
             <Link
               href="/account"

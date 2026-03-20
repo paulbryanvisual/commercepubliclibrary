@@ -24,13 +24,27 @@ export const siteConfig = {
   },
 } as const;
 
-export const navLinks = [
+export interface NavLink {
+  href: string;
+  label: string;
+  children?: { href: string; label: string }[];
+}
+
+export const navLinks: NavLink[] = [
   { href: "/", label: "Home" },
   { href: "/catalog", label: "Catalog" },
   { href: "/events", label: "Events" },
-  { href: "/services", label: "Services" },
-  { href: "/digital", label: "Digital Resources" },
-  { href: "/kids", label: "Kids" },
-  { href: "/history", label: "History" },
+  {
+    href: "/services",
+    label: "Services",
+    children: [
+      { href: "/services", label: "All Services" },
+      { href: "/digital", label: "Digital Resources" },
+      { href: "/kids", label: "Kids" },
+      { href: "/history", label: "History" },
+      { href: "/services/passport", label: "Passports" },
+      { href: "/services/rooms", label: "Meeting Rooms" },
+    ],
+  },
   { href: "/about", label: "About" },
-] as const;
+];
