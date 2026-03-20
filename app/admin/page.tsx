@@ -18,12 +18,32 @@ const AdminChat = dynamic(() => import("@/components/ai/AdminChat"), {
   ),
 });
 
+interface AdminUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: string;
+}
+
+type View = "login" | "reset-request" | "reset-confirm";
+
 export default function AdminPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<AdminUser | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  // Login state
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Password reset state
+  const [view, setView] = useState<View>("login");
+  const [resetUsername, setResetUsername] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetMessage, setResetMessage] = useState("");
 
   /* Check existing session on mount */
   useEffect(() => {
@@ -31,7 +51,8 @@ export default function AdminPage() {
       try {
         const res = await fetch("/api/auth/admin-session", { method: "GET" });
         if (res.ok) {
-          setIsAuthenticated(true);
+          const data = await res.json();
+          setUser(data.user);
         }
       } catch {
         // No session
@@ -51,14 +72,88 @@ export default function AdminPage() {
       const res = await fetch("/api/auth/admin-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
 
       if (res.ok) {
-        setIsAuthenticated(true);
+        const data = await res.json();
+        setUser(data.user);
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Incorrect password. Please try again.");
+        setError(data.error || "Invalid credentials. Please try again.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /* Handle password reset request */
+  const handleResetRequest = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setResetMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: resetUsername }),
+      });
+
+      const data = await res.json();
+      if (data.resetToken) {
+        setResetToken(data.resetToken);
+        setView("reset-confirm");
+        setResetMessage("Enter your new password below.");
+      } else {
+        setResetMessage(data.message || "If that account exists, a reset has been initiated.");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /* Handle password reset confirmation */
+  const handleResetConfirm = async (e: FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setResetMessage("");
+
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken, newPassword }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setResetMessage("Password reset successfully! You can now sign in.");
+        setTimeout(() => {
+          setView("login");
+          setResetMessage("");
+          setNewPassword("");
+          setConfirmPassword("");
+          setResetToken("");
+        }, 2000);
+      } else {
+        setError(data.error || "Failed to reset password.");
       }
     } catch {
       setError("Network error. Please try again.");
@@ -74,7 +169,8 @@ export default function AdminPage() {
     } catch {
       // Best-effort
     }
-    setIsAuthenticated(false);
+    setUser(null);
+    setUsername("");
     setPassword("");
   };
 
@@ -94,7 +190,7 @@ export default function AdminPage() {
   }
 
   /* ─── Authenticated: show chat ─── */
-  if (isAuthenticated) {
+  if (user) {
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Admin top bar */}
@@ -111,8 +207,19 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-flex items-center rounded-full bg-purple-light px-2.5 py-0.5 text-[10px] font-semibold text-purple uppercase tracking-wide">
-              Staff Only
+            {/* User identity badge */}
+            <div className="hidden sm:flex items-center gap-2 rounded-full bg-purple-light px-3 py-1">
+              <div className="h-5 w-5 rounded-full bg-purple flex items-center justify-center">
+                <span className="text-[10px] font-bold text-white uppercase">
+                  {user.displayName.charAt(0)}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-purple">
+                {user.displayName}
+              </span>
+            </div>
+            <span className="hidden lg:inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
+              {user.role}
             </span>
             <button
               onClick={handleLogout}
@@ -123,13 +230,13 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Chat interface */}
-        <AdminChat />
+        {/* Chat interface — pass user info */}
+        <AdminChat userId={user.id} userName={user.displayName} />
       </div>
     );
   }
 
-  /* ─── Login gate ─── */
+  /* ─── Login / Reset gate ─── */
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
@@ -146,40 +253,60 @@ export default function AdminPage() {
           </p>
         </div>
 
-        {/* Login card */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-          <div className="text-center mb-6">
-            <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-purple-light flex items-center justify-center">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#534AB7" strokeWidth="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+        {/* ─── Login Form ─── */}
+        {view === "login" && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+            <div className="text-center mb-6">
+              <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-purple-light flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#534AB7" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <p className="text-sm text-gray-600">
+                Sign in to manage the library website.
+              </p>
             </div>
-            <p className="text-sm text-gray-600">
-              Enter the admin password to access the AI content management interface.
-            </p>
-          </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label htmlFor="admin-password" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Password
-              </label>
-              <input
-                type="password"
-                id="admin-password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setError("");
-                }}
-                className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple focus:ring-2 focus:ring-purple/20 transition-all"
-                placeholder="Enter admin password"
-                autoFocus
-                autoComplete="current-password"
-              />
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label htmlFor="admin-username" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  id="admin-username"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError("");
+                  }}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple focus:ring-2 focus:ring-purple/20 transition-all"
+                  placeholder="Enter your username"
+                  autoFocus
+                  autoComplete="username"
+                />
+              </div>
+              <div>
+                <label htmlFor="admin-password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  id="admin-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError("");
+                  }}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple focus:ring-2 focus:ring-purple/20 transition-all"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                />
+              </div>
+
               {error && (
-                <p className="mt-2 text-xs text-red flex items-center gap-1">
+                <p className="text-xs text-red flex items-center gap-1">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10" />
                     <path d="M12 8v4M12 16h.01" />
@@ -187,26 +314,212 @@ export default function AdminPage() {
                   {error}
                 </p>
               )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !username || !password}
+                className="w-full rounded-xl bg-purple py-2.5 text-sm font-semibold text-white hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => {
+                  setView("reset-request");
+                  setError("");
+                }}
+                className="text-xs text-purple hover:underline"
+              >
+                Forgot password?
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={isSubmitting || !password}
-              className="w-full rounded-xl bg-purple py-2.5 text-sm font-semibold text-white hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </div>
+        )}
+
+        {/* ─── Reset Request Form ─── */}
+        {view === "reset-request" && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+            <div className="text-center mb-6">
+              <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-amber-50 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <path d="M22 6l-10 7L2 6" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-semibold text-gray-800">Reset Password</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Enter your username to get a reset token.
+              </p>
+            </div>
+
+            <form onSubmit={handleResetRequest} className="space-y-4">
+              <div>
+                <label htmlFor="reset-username" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  id="reset-username"
+                  value={resetUsername}
+                  onChange={(e) => {
+                    setResetUsername(e.target.value);
+                    setError("");
+                    setResetMessage("");
+                  }}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple focus:ring-2 focus:ring-purple/20 transition-all"
+                  placeholder="Enter your username"
+                  autoFocus
+                />
+              </div>
+
+              {error && (
+                <p className="text-xs text-red flex items-center gap-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v4M12 16h.01" />
                   </svg>
-                  Signing in...
-                </>
-              ) : (
-                "Sign In"
+                  {error}
+                </p>
               )}
-            </button>
-          </form>
-        </div>
+
+              {resetMessage && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  {resetMessage}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !resetUsername}
+                className="w-full rounded-xl bg-purple py-2.5 text-sm font-semibold text-white hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSubmitting ? "Generating..." : "Generate Reset Token"}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => {
+                  setView("login");
+                  setError("");
+                  setResetMessage("");
+                }}
+                className="text-xs text-gray-500 hover:underline"
+              >
+                ← Back to sign in
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Reset Confirm Form ─── */}
+        {view === "reset-confirm" && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+            <div className="text-center mb-6">
+              <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-green-50 flex items-center justify-center">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-semibold text-gray-800">Set New Password</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Choose a new password for <strong>{resetUsername}</strong>.
+              </p>
+            </div>
+
+            <form onSubmit={handleResetConfirm} className="space-y-4">
+              <div>
+                <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  id="new-password"
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setError("");
+                  }}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple focus:ring-2 focus:ring-purple/20 transition-all"
+                  placeholder="Min 6 characters"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  id="confirm-password"
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setError("");
+                  }}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple focus:ring-2 focus:ring-purple/20 transition-all"
+                  placeholder="Re-enter password"
+                />
+              </div>
+
+              {error && (
+                <p className="text-xs text-red flex items-center gap-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v4M12 16h.01" />
+                  </svg>
+                  {error}
+                </p>
+              )}
+
+              {resetMessage && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  {resetMessage}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !newPassword || !confirmPassword}
+                className="w-full rounded-xl bg-primary py-2.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSubmitting ? "Resetting..." : "Reset Password"}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => {
+                  setView("login");
+                  setError("");
+                  setResetMessage("");
+                }}
+                className="text-xs text-gray-500 hover:underline"
+              >
+                ← Back to sign in
+              </button>
+            </div>
+          </div>
+        )}
 
         <p className="text-center text-[10px] text-gray-400 mt-6">
           This area is restricted to authorized library staff.

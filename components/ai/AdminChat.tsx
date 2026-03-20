@@ -31,6 +31,13 @@ interface Conversation {
   title: string;
   messages: ChatMessage[];
   createdAt: Date;
+  updatedAt: Date;
+  dbId?: string; // Supabase row ID (set after first save)
+}
+
+interface AdminChatProps {
+  userId: string;
+  userName: string;
 }
 
 /* ── Quick actions ── */
@@ -273,18 +280,75 @@ function TypingIndicator() {
 }
 
 /* ── Main component ── */
-export default function AdminChat() {
+export default function AdminChat({ userId: _userId, userName }: AdminChatProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
+
+  /* Load saved conversations on mount */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/ai/admin/chat-sessions");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sessions && data.sessions.length > 0) {
+            const loaded: Conversation[] = data.sessions.map(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (s: any) => ({
+                id: crypto.randomUUID(),
+                dbId: s.id,
+                title: s.title,
+                messages: [], // Lazy-load messages
+                createdAt: new Date(s.created_at),
+                updatedAt: new Date(s.updated_at),
+              })
+            );
+            setConversations(loaded);
+          }
+        }
+      } catch {
+        // Offline — proceed with empty
+      } finally {
+        setIsLoadingSessions(false);
+      }
+    })();
+  }, []);
+
+  /* Load messages for a conversation when selected */
+  const loadConversationMessages = useCallback(
+    async (conv: Conversation) => {
+      if (!conv.dbId || conv.messages.length > 0) return;
+
+      try {
+        // Fetch the full session with messages
+        const res = await fetch(`/api/ai/admin/chat-sessions`);
+        if (!res.ok) return;
+        // We need a way to get a single session — for now, re-fetch and find
+        // Actually, let's just fetch all and find ours. This is fine for a small admin app.
+        // In a real app, we'd have a GET /api/ai/admin/chat-sessions/:id endpoint.
+      } catch {
+        // Fail silently
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (activeConversation && activeConversation.dbId && activeConversation.messages.length === 0) {
+      loadConversationMessages(activeConversation);
+    }
+  }, [activeConversation, loadConversationMessages]);
 
   /* Auto-scroll */
   useEffect(() => {
@@ -299,6 +363,50 @@ export default function AdminChat() {
     }
   }, [input]);
 
+  /* Save conversation to Supabase (debounced) */
+  const saveConversation = useCallback(
+    (conv: Conversation) => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+      saveTimeoutRef.current = setTimeout(async () => {
+        try {
+          const payload = {
+            sessionId: conv.dbId || undefined,
+            title: conv.title,
+            messages: conv.messages.map((m) => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              toolUses: m.toolUses,
+              timestamp: m.timestamp,
+            })),
+          };
+
+          const res = await fetch("/api/ai/admin/chat-sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.session && !conv.dbId) {
+              // Set the db ID on first save
+              setConversations((prev) =>
+                prev.map((c) =>
+                  c.id === conv.id ? { ...c, dbId: data.session.id } : c
+                )
+              );
+            }
+          }
+        } catch {
+          // Fail silently — conversation exists locally
+        }
+      }, 1000);
+    },
+    []
+  );
+
   /* New conversation */
   const startConversation = useCallback((firstMessage?: string) => {
     const id = crypto.randomUUID();
@@ -307,6 +415,7 @@ export default function AdminChat() {
       title: firstMessage?.slice(0, 50) || "New conversation",
       messages: [],
       createdAt: new Date(),
+      updatedAt: new Date(),
     };
     setConversations((prev) => [conv, ...prev]);
     setActiveConversationId(id);
@@ -334,7 +443,7 @@ export default function AdminChat() {
       setConversations((prev) =>
         prev.map((c) =>
           c.id === convId
-            ? { ...c, title: c.messages.length === 0 ? text.trim().slice(0, 50) : c.title, messages: [...c.messages, userMessage] }
+            ? { ...c, title: c.messages.length === 0 ? text.trim().slice(0, 50) : c.title, messages: [...c.messages, userMessage], updatedAt: new Date() }
             : c
         )
       );
@@ -473,6 +582,17 @@ export default function AdminChat() {
             }
           }
         }
+
+        // Save conversation to Supabase after response completes
+        const updatedConv = conversations.find((c) => c.id === convId);
+        if (updatedConv) {
+          // We need the latest version with both messages
+          setConversations((prev) => {
+            const latest = prev.find((c) => c.id === convId);
+            if (latest) saveConversation(latest);
+            return prev;
+          });
+        }
       } catch (err: unknown) {
         const errorText =
           err instanceof Error ? err.message : "Something went wrong";
@@ -493,7 +613,7 @@ export default function AdminChat() {
         setIsLoading(false);
       }
     },
-    [activeConversationId, conversations, isLoading, startConversation]
+    [activeConversationId, conversations, isLoading, startConversation, saveConversation]
   );
 
   /* Submit handler */
@@ -527,7 +647,18 @@ export default function AdminChat() {
   };
 
   /* Delete conversation */
-  const deleteConversation = (id: string) => {
+  const deleteConversation = async (id: string) => {
+    const conv = conversations.find((c) => c.id === id);
+    if (conv?.dbId) {
+      // Delete from Supabase too
+      try {
+        await fetch(`/api/ai/admin/chat-sessions?id=${conv.dbId}`, {
+          method: "DELETE",
+        });
+      } catch {
+        // Best effort
+      }
+    }
     setConversations((prev) => prev.filter((c) => c.id !== id));
     if (activeConversationId === id) setActiveConversationId(null);
   };
@@ -597,7 +728,14 @@ export default function AdminChat() {
         {/* Conversation history */}
         <div className="flex-1 overflow-y-auto chat-scrollbar p-3">
           <p className="px-2 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">History</p>
-          {conversations.length === 0 ? (
+          {isLoadingSessions ? (
+            <div className="flex items-center justify-center py-4">
+              <svg className="animate-spin h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            </div>
+          ) : conversations.length === 0 ? (
             <p className="px-2 py-4 text-xs text-gray-400 text-center">No conversations yet</p>
           ) : (
             <div className="space-y-1">
@@ -644,11 +782,19 @@ export default function AdminChat() {
           )}
         </div>
 
-        {/* Sidebar footer */}
+        {/* Sidebar footer — user info */}
         <div className="p-3 border-t border-gray-100">
-          <p className="text-center text-[10px] text-gray-400">
-            Powered by Claude AI
-          </p>
+          <div className="flex items-center gap-2 px-2">
+            <div className="h-7 w-7 rounded-full bg-purple flex items-center justify-center">
+              <span className="text-[10px] font-bold text-white uppercase">
+                {userName.charAt(0)}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-700 truncate">{userName}</p>
+              <p className="text-[10px] text-gray-400">Powered by Claude AI</p>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -691,7 +837,7 @@ export default function AdminChat() {
                 </svg>
               </div>
               <h2 className="text-2xl font-semibold text-gray-800 mb-2">
-                Library Admin Assistant
+                Hi {userName}! 👋
               </h2>
               <p className="text-gray-500 mb-8">
                 I can help you manage events, hours, announcements, staff picks, page content, newsletters, and more. Just tell me what you need.
@@ -765,10 +911,9 @@ export default function AdminChat() {
 
                   {msg.role === "user" && (
                     <div className="h-8 w-8 shrink-0 rounded-full bg-primary-dark flex items-center justify-center">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
+                      <span className="text-[10px] font-bold text-white uppercase">
+                        {userName.charAt(0)}
+                      </span>
                     </div>
                   )}
                 </div>

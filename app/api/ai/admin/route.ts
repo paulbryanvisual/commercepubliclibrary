@@ -6,8 +6,11 @@ import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth/adminAuth";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/* ── System prompt ── */
-const SYSTEM_PROMPT = `You are the content management assistant for Commerce Public Library in Commerce, Texas.
+/* ── System prompt builder ── */
+function buildSystemPrompt(userName: string): string {
+  return `You are the content management assistant for Commerce Public Library in Commerce, Texas.
+
+You are currently helping ${userName}. Address them by name when appropriate.
 
 You help library staff:
 - Add, update, and cancel events
@@ -29,6 +32,7 @@ Guidelines:
 8. For analytics, present data in a clean, readable format with key highlights.
 
 Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
+}
 
 /* ── Types ── */
 interface ChatMessage {
@@ -43,10 +47,10 @@ interface RequestBody {
 
 /* ── Route handler ── */
 export async function POST(request: NextRequest) {
-  // Auth check
+  // Auth check — now returns session payload with user info
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const isValid = await verifySession(sessionToken);
-  if (!isValid) {
+  const session = await verifySession(sessionToken);
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
     { role: "user", content: message },
   ];
 
-  // Use streaming
+  // Use streaming with personalized system prompt
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -101,7 +105,7 @@ export async function POST(request: NextRequest) {
         const response = await client.messages.create({
           model: "claude-sonnet-4-5-20250514",
           max_tokens: 4096,
-          system: SYSTEM_PROMPT,
+          system: buildSystemPrompt(session.displayName),
           tools: adminTools,
           messages,
           stream: true,

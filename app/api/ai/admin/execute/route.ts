@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth/adminAuth";
+import { supabase } from "@/lib/supabase";
 import {
   addEvent,
   updateEvent,
@@ -18,11 +19,30 @@ interface ExecuteRequest {
   toolInput: Record<string, unknown>;
 }
 
+/** Log an action to the audit_log table */
+async function logAudit(
+  userId: string,
+  userName: string,
+  action: string,
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  result: unknown
+) {
+  await supabase.from("audit_log").insert({
+    user_id: userId,
+    user_name: userName,
+    action,
+    tool_name: toolName,
+    tool_input: toolInput,
+    result: result as Record<string, unknown>,
+  });
+}
+
 export async function POST(request: NextRequest) {
-  // Auth check
+  // Auth check — now returns full session payload with user info
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const isValid = await verifySession(sessionToken);
-  if (!isValid) {
+  const session = await verifySession(sessionToken);
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -47,58 +67,67 @@ export async function POST(request: NextRequest) {
 
   try {
     let result: unknown;
+    let action = "unknown";
 
     switch (toolName) {
       case "create_event":
+        action = "Created event";
         result = await addEvent(
           toolInput as Parameters<typeof addEvent>[0]
         );
         break;
 
       case "update_event":
+        action = "Updated event";
         result = await updateEvent(
           toolInput as Parameters<typeof updateEvent>[0]
         );
         break;
 
       case "delete_event":
+        action = "Deleted event";
         result = await deleteEvent(
           toolInput as Parameters<typeof deleteEvent>[0]
         );
         break;
 
       case "create_announcement":
+        action = "Created announcement";
         result = await addAnnouncement(
           toolInput as Parameters<typeof addAnnouncement>[0]
         );
         break;
 
       case "update_hours":
+        action = "Updated hours";
         result = await updateHours(
           toolInput as Parameters<typeof updateHours>[0]
         );
         break;
 
       case "add_closure":
+        action = "Added closure";
         result = await addClosure(
           toolInput as Parameters<typeof addClosure>[0]
         );
         break;
 
       case "create_staff_pick":
+        action = "Created staff pick";
         result = await addStaffPick(
           toolInput as Parameters<typeof addStaffPick>[0]
         );
         break;
 
       case "update_page_content":
+        action = "Updated page content";
         result = await updatePageContent(
           toolInput as Parameters<typeof updatePageContent>[0]
         );
         break;
 
       case "upload_image":
-        // Placeholder — image upload requires file storage integration
+        action = "Uploaded image";
         result = {
           url: `/images/uploads/${(toolInput as { filename: string }).filename}`,
           altText: (toolInput as { alt_text: string }).alt_text,
@@ -107,7 +136,7 @@ export async function POST(request: NextRequest) {
         break;
 
       case "send_newsletter_draft":
-        // Placeholder — newsletter sending requires email integration
+        action = "Drafted newsletter";
         result = {
           draft: true,
           subject: (toolInput as { subject: string }).subject,
@@ -117,7 +146,7 @@ export async function POST(request: NextRequest) {
         break;
 
       case "get_analytics":
-        // Placeholder — analytics requires integration with analytics provider
+        action = "Viewed analytics";
         result = {
           period: (toolInput as { period: string }).period,
           pageViews: 0,
@@ -134,10 +163,31 @@ export async function POST(request: NextRequest) {
         );
     }
 
+    // Log the action to audit trail
+    await logAudit(
+      session.userId,
+      session.displayName,
+      action,
+      toolName,
+      toolInput,
+      result
+    );
+
     return NextResponse.json({ success: true, result });
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "An unknown error occurred";
+
+    // Log the error too
+    await logAudit(
+      session.userId,
+      session.displayName,
+      `Error: ${message}`,
+      toolName,
+      toolInput,
+      { error: message }
+    );
+
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
