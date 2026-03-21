@@ -183,6 +183,83 @@ function LivePreview() {
   );
 }
 
+/* ── Resizable Split Panel ── */
+function ResizableSplit({
+  left,
+  right,
+}: {
+  left: React.ReactNode;
+  right: React.ReactNode;
+}) {
+  // Store ratio as percentage (0-100) — chat panel width
+  const [chatPercent, setChatPercent] = useState(38);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startPercentRef = useRef(0);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+    startXRef.current = e.clientX;
+    startPercentRef.current = chatPercent;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [chatPercent]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || !containerRef.current) return;
+      const containerWidth = containerRef.current.offsetWidth;
+      const deltaX = e.clientX - startXRef.current;
+      const deltaPercent = (deltaX / containerWidth) * 100;
+      const newPercent = Math.min(70, Math.max(20, startPercentRef.current + deltaPercent));
+      setChatPercent(newPercent);
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
+  return (
+    <div ref={containerRef} className="flex-1 flex min-h-0">
+      {/* Left: Chat panel */}
+      <div
+        className="w-full lg:flex flex-col min-h-0 border-r border-gray-200"
+        style={{ flex: `0 0 ${chatPercent}%` }}
+      >
+        {left}
+      </div>
+
+      {/* Drag handle */}
+      <div
+        onMouseDown={handleMouseDown}
+        className="hidden lg:flex items-center justify-center w-1.5 cursor-col-resize bg-gray-200 hover:bg-purple/40 active:bg-purple/60 transition-colors shrink-0 group"
+        title="Drag to resize"
+      >
+        <div className="w-0.5 h-8 rounded-full bg-gray-400 group-hover:bg-purple group-active:bg-purple transition-colors" />
+      </div>
+
+      {/* Right: Live website preview */}
+      <div className="hidden lg:flex flex-1 flex-col bg-gray-100 min-h-0">
+        {right}
+      </div>
+    </div>
+  );
+}
+
 interface AdminUser {
   id: string;
   username: string;
@@ -405,18 +482,11 @@ function AdminPageInner() {
           </div>
         </div>
 
-        {/* Split layout: Chat left, Live preview right */}
-        <div className="flex-1 flex min-h-0">
-          {/* Left: Chat panel */}
-          <div className="w-full lg:w-[520px] xl:w-[600px] shrink-0 border-r border-gray-200 flex flex-col min-h-0">
-            <AdminChat userId={user.id} userName={user.displayName} />
-          </div>
-
-          {/* Right: Live website preview */}
-          <div className="hidden lg:flex flex-1 flex-col bg-gray-100 min-h-0">
-            <LivePreview />
-          </div>
-        </div>
+        {/* Split layout: Chat left, Live preview right — resizable */}
+        <ResizableSplit
+          left={<AdminChat userId={user.id} userName={user.displayName} />}
+          right={<LivePreview />}
+        />
       </div>
     );
   }
