@@ -39,22 +39,46 @@ export default function AdminChatDrawer({
 }: Props) {
   const router = useRouter();
 
-  // Resizable size (px for left width, px for bottom height)
-  const [leftWidth, setLeftWidth] = useState(420);
-  const [bottomHeight, setBottomHeight] = useState(380);
+  // Resizable size — default thin
+  const [leftWidth, setLeftWidth] = useState(300);
+  const [bottomHeight, setBottomHeight] = useState(280);
   const isDraggingRef = useRef(false);
   const startRef = useRef(0);
   const startSizeRef = useRef(0);
 
-  // Listen for CMS changes → refresh the page (no iframe needed!)
+  // Listen for CMS changes → refresh the page
   useEffect(() => {
     const handler = () => {
-      // Small delay to let the DB write settle, then refresh server components
       setTimeout(() => router.refresh(), 300);
     };
     window.addEventListener("cms-published", handler);
     return () => window.removeEventListener("cms-published", handler);
   }, [router]);
+
+  // Push page content aside when panel is open
+  useEffect(() => {
+    const isLeft = position === "left";
+    if (open) {
+      if (isLeft) {
+        document.body.style.marginLeft = `${leftWidth}px`;
+        document.body.style.marginBottom = "";
+      } else {
+        document.body.style.marginLeft = "";
+        document.body.style.marginBottom = `${bottomHeight}px`;
+      }
+    } else {
+      document.body.style.marginLeft = "";
+      document.body.style.marginBottom = "";
+    }
+    // Smooth transition
+    document.body.style.transition = "margin 0.3s ease-in-out";
+
+    return () => {
+      document.body.style.marginLeft = "";
+      document.body.style.marginBottom = "";
+      document.body.style.transition = "";
+    };
+  }, [open, position, leftWidth, bottomHeight]);
 
   // Resize handlers
   const handleMouseDown = useCallback(
@@ -74,10 +98,10 @@ export default function AdminChatDrawer({
       if (!isDraggingRef.current) return;
       if (position === "left") {
         const delta = e.clientX - startRef.current;
-        setLeftWidth(Math.min(700, Math.max(320, startSizeRef.current + delta)));
+        setLeftWidth(Math.min(700, Math.max(280, startSizeRef.current + delta)));
       } else {
         const delta = startRef.current - e.clientY;
-        setBottomHeight(Math.min(600, Math.max(250, startSizeRef.current + delta)));
+        setBottomHeight(Math.min(600, Math.max(200, startSizeRef.current + delta)));
       }
     };
 
@@ -97,29 +121,28 @@ export default function AdminChatDrawer({
     };
   }, [position]);
 
-  // Panel classes based on position and open state
   const isLeft = position === "left";
 
   const panelStyle: React.CSSProperties = isLeft
     ? {
         position: "fixed",
-        top: 40, // below toolbar
+        top: 40,
         left: 0,
         bottom: 0,
-        width: leftWidth,
+        width: open ? leftWidth : 0,
         zIndex: 40,
-        transform: open ? "translateX(0)" : "translateX(-100%)",
-        transition: "transform 0.3s ease-in-out",
+        transition: "width 0.3s ease-in-out",
+        overflow: "hidden",
       }
     : {
         position: "fixed",
         bottom: 0,
         left: 0,
         right: 0,
-        height: bottomHeight,
+        height: open ? bottomHeight : 0,
         zIndex: 40,
-        transform: open ? "translateY(0)" : "translateY(100%)",
-        transition: "transform 0.3s ease-in-out",
+        transition: "height 0.3s ease-in-out",
+        overflow: "hidden",
       };
 
   // Resize handle
@@ -139,32 +162,14 @@ export default function AdminChatDrawer({
     </div>
   );
 
-  // Collapse tab (visible when panel is closed)
-  const collapseTab = !open && (
-    <button
-      onClick={onToggle}
-      className={`fixed z-40 bg-purple text-white shadow-lg hover:bg-purple-600 transition-all ${
-        isLeft
-          ? "top-1/2 -translate-y-1/2 left-0 rounded-r-xl px-1.5 py-4"
-          : "bottom-0 left-1/2 -translate-x-1/2 rounded-t-xl px-4 py-1.5"
-      }`}
-      title="Open chat panel"
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-    </button>
-  );
-
   return (
-    <>
-      {collapseTab}
-      <div style={panelStyle} className="bg-white border-gray-200 shadow-xl flex flex-col overflow-hidden border-r border-t">
-        {handleEl}
-        <div className={`flex flex-col flex-1 min-h-0 ${isLeft ? "pr-1.5" : "pt-1.5"}`}>
-          <AdminChat userId={userId} userName={userName} currentPage={currentPage} />
-        </div>
+    <div style={panelStyle} className="bg-white border-gray-200 shadow-xl flex flex-col border-r border-t">
+      {handleEl}
+      <div className={`flex flex-col flex-1 min-h-0 min-w-0 ${isLeft ? "pr-1.5" : "pt-1.5"}`}
+        style={isLeft ? { minWidth: leftWidth } : { minHeight: bottomHeight }}
+      >
+        <AdminChat userId={userId} userName={userName} currentPage={currentPage} />
       </div>
-    </>
+    </div>
   );
 }
