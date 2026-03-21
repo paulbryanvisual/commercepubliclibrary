@@ -831,19 +831,42 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
         {/* Messages or welcome */}
         {!activeConversation || activeConversation.messages.length === 0 ? (
           /* ── Welcome screen ── */
-          <div className="flex-1 flex items-center justify-center p-6">
-            <div className="max-w-lg text-center">
-              <div className="mx-auto mb-6 h-20 w-20 rounded-2xl bg-purple/10 flex items-center justify-center">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#534AB7" strokeWidth="1.5">
+          <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+            <div className="max-w-md w-full text-center">
+              <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-purple/10 flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#534AB7" strokeWidth="1.5">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-semibold text-gray-800 mb-2">
+              <h2 className="text-xl font-semibold text-gray-800 mb-1">
                 Hi {userName}! 👋
               </h2>
-              <p className="text-gray-500">
-                I can help you manage events, hours, announcements, staff picks, page content, newsletters, and more. Just tell me what you need.
+              <p className="text-sm text-gray-500 mb-6">
+                What would you like to update?
               </p>
+
+              {/* Quick action buttons */}
+              <div className="grid grid-cols-3 gap-2.5">
+                {[
+                  { label: "Add Event", icon: <><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>, prompt: "I need to add a new event." },
+                  { label: "Update Hours", icon: <><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>, prompt: "I need to update the library hours." },
+                  { label: "Post Announcement", icon: <><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></>, prompt: "I want to post a new announcement." },
+                  { label: "Staff Picks", icon: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>, prompt: "I want to add a new staff pick." },
+                  { label: "Edit Page", icon: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>, prompt: "I need to edit page content." },
+                  { label: "Newsletter", icon: <><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></>, prompt: "I want to draft a newsletter." },
+                ].map((action) => (
+                  <button
+                    key={action.label}
+                    onClick={() => sendMessage(action.prompt)}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-4 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      {action.icon}
+                    </svg>
+                    <span className="text-xs font-medium">{action.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
