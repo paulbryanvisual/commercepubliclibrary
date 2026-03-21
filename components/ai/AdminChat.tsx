@@ -38,9 +38,11 @@ interface Conversation {
 interface AttachedFile {
   id: string;
   file: File;
-  preview?: string; // data URL for image previews
-  base64?: string;  // base64 data for sending to API
+  preview?: string;    // data URL for image previews
+  base64?: string;     // base64 data for sending to Claude vision
   mediaType?: string;
+  uploadedUrl?: string; // public URL after upload to Supabase Storage
+  uploading?: boolean;
 }
 
 interface AdminChatProps {
@@ -516,10 +518,15 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
           content: m.content,
         }));
 
-        // Add file context to message if non-image files attached
+        // Add file context to message
         let messageText = text.trim();
         if (nonImageFiles.length > 0) {
           messageText += `\n\n[Files attached: ${nonImageFiles.join(", ")}]`;
+        }
+        // Tell Claude the permanent storage URLs for any uploaded images
+        const uploadedImages = attachedFiles.filter((f) => f.uploadedUrl);
+        if (uploadedImages.length > 0) {
+          messageText += `\n\n[Image URLs already uploaded to storage: ${uploadedImages.map((f) => `${f.file.name} → ${f.uploadedUrl}`).join(", ")}. Use these exact URLs when updating page content — do not call upload_image.]`;
         }
 
         const res = await fetch("/api/ai/admin", {
@@ -712,15 +719,38 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
       const isImage = allowedImageTypes.includes(file.type);
 
       if (isImage) {
-        // Read as base64 for API + create preview
+        // Read as base64, show preview immediately, then upload to storage
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
           const dataUrl = reader.result as string;
           const base64 = dataUrl.split(",")[1];
+          // Add with uploading state first
           setAttachedFiles((prev) => [
             ...prev,
-            { id, file, preview: dataUrl, base64, mediaType: file.type },
+            { id, file, preview: dataUrl, base64, mediaType: file.type, uploading: true },
           ]);
+          // Upload to Supabase Storage
+          try {
+            const res = await fetch("/api/cms/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ base64, mediaType: file.type, fileName: file.name }),
+            });
+            const data = await res.json();
+            if (res.ok && data.url) {
+              setAttachedFiles((prev) =>
+                prev.map((f) => f.id === id ? { ...f, uploadedUrl: data.url, uploading: false } : f)
+              );
+            } else {
+              setAttachedFiles((prev) =>
+                prev.map((f) => f.id === id ? { ...f, uploading: false } : f)
+              );
+            }
+          } catch {
+            setAttachedFiles((prev) =>
+              prev.map((f) => f.id === id ? { ...f, uploading: false } : f)
+            );
+          }
         };
         reader.readAsDataURL(file);
       } else {
@@ -1038,7 +1068,19 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                     )}
                     <div className="flex-1 min-w-0 max-w-[120px]">
                       <p className="text-[11px] font-medium text-gray-700 truncate">{af.file.name}</p>
-                      <p className="text-[10px] text-gray-400">{(af.file.size / 1024).toFixed(0)} KB</p>
+                      {af.uploading ? (
+                        <p className="text-[10px] text-blue-500 flex items-center gap-1">
+                          <svg className="animate-spin h-2.5 w-2.5" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg>
+                          Uploading...
+                        </p>
+                      ) : af.uploadedUrl ? (
+                        <p className="text-[10px] text-green-600 flex items-center gap-1">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+                          Ready
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-gray-400">{(af.file.size / 1024).toFixed(0)} KB</p>
+                      )}
                     </div>
                     <button
                       type="button"
