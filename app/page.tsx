@@ -6,8 +6,9 @@ import HeroIllustration from "@/components/ui/HeroIllustration";
 import EventsCarousel from "@/components/events/EventsCarousel";
 import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
 
-// Revalidate every 60 seconds so CMS changes appear quickly
-export const revalidate = 60;
+// No caching — always fetch fresh CMS data (preview must be instant)
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 // ─── Quick actions ───
 

@@ -51,9 +51,14 @@ function LivePreview() {
 
   const refresh = useCallback(() => {
     if (iframeRef.current) {
-      iframeRef.current.src = iframeRef.current.src;
+      // Cache-bust: strip old _t param and add fresh timestamp
+      const base = previewUrl.split("?")[0];
+      const params = new URLSearchParams();
+      params.set("preview", "true");
+      params.set("_t", Date.now().toString());
+      iframeRef.current.src = `${base}?${params.toString()}`;
     }
-  }, []);
+  }, [previewUrl]);
 
   // Listen for publish events from the chat to auto-refresh
   useEffect(() => {
