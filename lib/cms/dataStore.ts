@@ -238,7 +238,14 @@ async function fetchData(mode: "published" | "all"): Promise<CMSData> {
   const pageContent: Record<string, Record<string, string>> = {};
   for (const row of pageRes.data || []) {
     if (!pageContent[row.page]) pageContent[row.page] = {};
-    pageContent[row.page][row.section] = row.content;
+    // content column may be jsonb or text — normalize to plain string
+    const rawContent = row.content;
+    pageContent[row.page][row.section] =
+      typeof rawContent === "string"
+        ? rawContent
+        : rawContent !== null && rawContent !== undefined
+        ? JSON.stringify(rawContent)
+        : "";
   }
 
   return {
@@ -460,14 +467,20 @@ export async function updatePageContent(input: {
   section: string;
   content: string;
 }): Promise<CMSPageContent> {
+  // content is stored as text; ensure it's a plain string
+  const contentValue = typeof input.content === "string"
+    ? input.content
+    : JSON.stringify(input.content);
+
+  // Try with status column first (requires migration to have been run)
   const { data, error } = await supabase
     .from("page_content")
     .upsert(
       {
         page: input.page,
         section: input.section,
-        content: input.content,
-        status: "draft",
+        content: contentValue,
+        status: "published",
         updated_at: new Date().toISOString(),
       },
       { onConflict: "page,section" }
@@ -475,12 +488,41 @@ export async function updatePageContent(input: {
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // If status column doesn't exist yet (migration not run), retry without it
+    if (error.message?.includes("status") || error.message?.includes("column")) {
+      const { data: data2, error: error2 } = await supabase
+        .from("page_content")
+        .upsert(
+          {
+            page: input.page,
+            section: input.section,
+            content: contentValue,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "page,section" }
+        )
+        .select()
+        .single();
+
+      if (error2) throw new Error(error2.message);
+      return {
+        id: data2.id,
+        page: data2.page,
+        section: data2.section,
+        content: typeof data2.content === "string" ? data2.content : JSON.stringify(data2.content),
+        status: "published",
+        updatedAt: data2.updated_at,
+      };
+    }
+    throw new Error(error.message);
+  }
+
   return {
     id: data.id,
     page: data.page,
     section: data.section,
-    content: data.content,
+    content: typeof data.content === "string" ? data.content : JSON.stringify(data.content),
     status: data.status || "draft",
     updatedAt: data.updated_at,
   };

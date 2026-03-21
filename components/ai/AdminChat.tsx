@@ -228,9 +228,11 @@ function ToolPreviewCard({
       </div>
 
       {/* Error message */}
-      {state === "error" && errorMessage && (
-        <div className="mx-4 mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-          {errorMessage}
+      {state === "error" && (
+        <div className="mx-4 mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+          <div className="font-semibold mb-0.5">⚠ Failed to save</div>
+          <div className="text-red-600">{errorMessage || "Unknown error"}</div>
+          <div className="mt-1.5 text-red-500">Check Supabase table schema — you may need to run the SQL migration in supabase-migration-drafts.sql</div>
         </div>
       )}
 
@@ -294,13 +296,8 @@ function ToolPreviewCard({
 /* ── Typing indicator ── */
 function TypingIndicator() {
   return (
-    <div className="flex gap-3 animate-fade-in">
-      <div className="h-8 w-8 shrink-0 rounded-full bg-purple flex items-center justify-center">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      </div>
-      <div className="rounded-2xl bg-purple-50 px-4 py-3 flex items-center gap-1.5">
+    <div className="flex justify-start animate-fade-in">
+      <div className="rounded-2xl rounded-bl-md bg-purple-50 px-4 py-3 flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full bg-purple-300 animate-pulse-dot" style={{ animationDelay: "0ms" }} />
         <span className="h-2 w-2 rounded-full bg-purple-300 animate-pulse-dot" style={{ animationDelay: "300ms" }} />
         <span className="h-2 w-2 rounded-full bg-purple-300 animate-pulse-dot" style={{ animationDelay: "600ms" }} />
@@ -960,27 +957,20 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
           </div>
         ) : (
           /* ── Message list ── */
-          <div className="flex-1 overflow-y-auto chat-scrollbar p-4 sm:p-6">
-            <div className="max-w-3xl mx-auto space-y-6">
+          <div className="flex-1 overflow-y-auto chat-scrollbar p-3 sm:p-4">
+            <div className="space-y-3">
               {activeConversation.messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`flex gap-3 animate-fade-in ${
-                    msg.role === "user" ? "justify-end" : ""
+                  className={`flex animate-fade-in ${
+                    msg.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  {msg.role === "assistant" && (
-                    <div className="h-8 w-8 shrink-0 rounded-full bg-purple flex items-center justify-center">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </div>
-                  )}
                   <div
-                    className={`max-w-[80%] sm:max-w-[70%] ${
+                    className={`max-w-[92%] ${
                       msg.role === "user"
                         ? "rounded-2xl rounded-br-md bg-primary text-white px-4 py-3"
-                        : "rounded-2xl rounded-bl-md bg-purple-50 px-4 py-3"
+                        : "rounded-2xl rounded-bl-md bg-purple-50 px-4 py-3 w-full"
                     }`}
                   >
                     {/* Text content */}
@@ -1006,14 +996,6 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                       />
                     ))}
                   </div>
-
-                  {msg.role === "user" && (
-                    <div className="h-8 w-8 shrink-0 rounded-full bg-primary-dark flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-white uppercase">
-                        {userName.charAt(0)}
-                      </span>
-                    </div>
-                  )}
                 </div>
               ))}
 
@@ -1042,7 +1024,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
 
           <form
             onSubmit={handleSubmit}
-            className="max-w-3xl mx-auto"
+            className="w-full"
           >
             {/* Attached files preview */}
             {attachedFiles.length > 0 && (
@@ -1124,7 +1106,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
               />
               <button
                 type="submit"
-                disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
+                disabled={(!input.trim() && attachedFiles.length === 0) || isLoading || attachedFiles.some((f) => f.uploading)}
                 className="shrink-0 rounded-xl bg-purple p-2.5 text-white hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 aria-label="Send message"
               >

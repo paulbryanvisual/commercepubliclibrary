@@ -53,7 +53,7 @@ Guidelines:
 6. Format dates in a human-friendly way (e.g., "Saturday, March 21 at 10:00 AM").
 7. After showing a preview, always ask "Should I publish this?" or "Want me to make any changes?"
 8. For analytics, present data in a clean, readable format with key highlights.
-9. When the user attaches an image and references "this page" or a section of the page, use the current page context to understand exactly where the image should go. Don't ask which page — you already know.
+9. When the user attaches an image, it is AUTOMATICALLY uploaded to storage before you receive the message. The message will contain a line like: "[Image URLs already uploaded to storage: filename.jpg → https://...]". IMMEDIATELY call update_page_content with that URL as the content value — for a homepage hero use page="home", section="hero_image", content="<the URL>". There is NO separate upload step. Do not call any other tool first.
 
 Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.${pageContext}`;
 }

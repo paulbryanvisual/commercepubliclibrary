@@ -283,52 +283,26 @@ export const adminTools: Anthropic.Tool[] = [
   {
     name: "update_page_content",
     description:
-      "Update a section of content on any page of the website. Returns a before/after preview.",
+      "Update a section of content on any page of the website. Also used to set images/photos on any page — pass the image URL as the content value. Returns a before/after preview.",
     input_schema: {
       type: "object" as const,
       properties: {
         page: {
           type: "string",
           description:
-            "The page slug or path, e.g. 'about', 'services', 'kids', 'history'",
+            "The page slug, e.g. 'home', 'about', 'services', 'kids', 'history'",
         },
         section: {
           type: "string",
           description:
-            "The section identifier to update, e.g. 'hero', 'hours', 'description', 'faq'",
+            "The section identifier, e.g. 'hero_image' (homepage hero photo), 'hero_title', 'hero_description', 'hero', 'hours', 'description', 'faq'",
         },
         content: {
           type: "string",
-          description: "The new content (plain text or markdown)",
+          description: "The new content — plain text, markdown, or an image URL",
         },
       },
       required: ["page", "section", "content"],
-    },
-  },
-
-  /* ───── Image Upload ───── */
-  {
-    name: "upload_image",
-    description:
-      "Upload an image to the library's media storage. Returns a URL for use in events, announcements, etc.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        filename: {
-          type: "string",
-          description: "Original filename, e.g. 'storytime-poster.jpg'",
-        },
-        alt_text: {
-          type: "string",
-          description: "Accessible alt text describing the image",
-        },
-        category: {
-          type: "string",
-          enum: ["events", "announcements", "staff", "general"],
-          description: "Media category for organization",
-        },
-      },
-      required: ["filename", "alt_text"],
     },
   },
 
