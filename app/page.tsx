@@ -116,9 +116,6 @@ export default function HomePage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center py-12 md:py-20">
             {/* Left: Text */}
             <div className="relative z-10">
-              <div className="mb-5">
-                <StatusPill />
-              </div>
               <h1 className="text-4xl md:text-[52px] font-semibold text-white leading-[1.1] mb-5 tracking-tight">
                 Your library.
                 <br />
@@ -236,7 +233,23 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ─── UPCOMING EVENTS CAROUSEL (moved from below) ─── */}
+      {/* ─── STATUS + HOURS ─── */}
+      <section className="mx-auto max-w-site px-4 md:px-8 mt-10">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <StatusPill />
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-500">
+            {LIBRARY_HOURS.map((h, i) => (
+              <span key={h.day} className={`${i === mappedIndex ? "font-semibold text-primary" : ""}`}>
+                {h.day.slice(0, 3)}: {h.closed ? "Closed" : `${h.open} – ${h.close}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── UPCOMING EVENTS CAROUSEL ─── */}
       <div className="mt-16">
         <EventsCarousel />
       </div>

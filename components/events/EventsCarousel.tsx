@@ -1,11 +1,29 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
-import { sampleEvents, audienceConfig, type Audience } from "@/lib/events";
+import { sampleEvents, audienceConfig, type LibraryEvent, type Audience } from "@/lib/events";
 
 export default function EventsCarousel() {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [events, setEvents] = useState<LibraryEvent[]>(sampleEvents.slice(0, 7));
+
+  // Fetch live events from API on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/events");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.events && data.events.length > 0) {
+            setEvents(data.events.slice(0, 7));
+          }
+        }
+      } catch {
+        // Keep sample events as fallback
+      }
+    })();
+  }, []);
 
   const scroll = (direction: "left" | "right") => {
     if (scrollRef.current) {
@@ -17,8 +35,7 @@ export default function EventsCarousel() {
     }
   };
 
-  // Show first 7 events in carousel
-  const carouselEvents = sampleEvents.slice(0, 7);
+  const carouselEvents = events;
 
   return (
     <section className="relative">
