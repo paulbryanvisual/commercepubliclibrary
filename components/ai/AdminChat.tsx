@@ -265,11 +265,22 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [previewPage, setPreviewPage] = useState("/");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  /* Listen for preview page changes */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent).detail;
+      if (typeof path === "string") setPreviewPage(path);
+    };
+    window.addEventListener("preview-navigate", handler);
+    return () => window.removeEventListener("preview-navigate", handler);
+  }, []);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
 
@@ -471,6 +482,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
             message: messageText || "Please look at the attached image(s).",
             conversationHistory: history,
             images,
+            currentPage: previewPage,
           }),
         });
 
@@ -620,7 +632,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
         setIsLoading(false);
       }
     },
-    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles]
+    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles, previewPage]
   );
 
   /* Submit handler */

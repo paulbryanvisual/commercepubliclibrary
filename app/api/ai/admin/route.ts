@@ -6,8 +6,30 @@ import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth/adminAuth";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+/* ── Page context mapping ── */
+const PAGE_DESCRIPTIONS: Record<string, string> = {
+  "/": "Homepage — hero image/banner, search bar, quick action cards (My Account, Get a Card, Book a Room, Passports), open/closed status, weekly hours, events carousel, and footer.",
+  "/events": "Events listing page — shows all upcoming library events in a grid with images, dates, and descriptions.",
+  "/services": "Services page — overview of all library services including passport services, meeting rooms, computers/WiFi, printing.",
+  "/catalog": "Catalog search page — search interface for the library's book catalog.",
+  "/about": "About page — library history, staff directory, mission statement, photos of the building and staff.",
+  "/kids": "Kids zone page — children's programs, story time schedules, summer reading, educational resources.",
+  "/digital": "Digital resources page — links to Libby/OverDrive, Hoopla, TexShare databases, and other online resources.",
+  "/history": "Local history page — Commerce and Hunt County historical resources and archives.",
+  "/get-card": "Get a Library Card page — online card application form.",
+  "/services/passport": "Passport services page — appointment booking, requirements, fees, and hours for passport processing.",
+  "/services/rooms": "Meeting rooms page — room booking form, room descriptions, availability, and policies.",
+  "/account": "My Account page — patron login for checkouts, holds, and fines.",
+};
+
 /* ── System prompt builder ── */
-function buildSystemPrompt(userName: string): string {
+function buildSystemPrompt(userName: string, currentPage?: string): string {
+  const pageContext = currentPage && PAGE_DESCRIPTIONS[currentPage]
+    ? `\n\nThe staff member is currently viewing: ${currentPage}\nPage description: ${PAGE_DESCRIPTIONS[currentPage]}\n\nWhen they refer to "this page", "the photo here", "the top image", "this section", etc., they are referring to the page shown in their live preview (${currentPage}). Use this context to understand their requests without asking which page they mean.`
+    : currentPage
+    ? `\n\nThe staff member is currently viewing: ${currentPage}. When they refer to "this page" or elements on it, they mean this page.`
+    : "";
+
   return `You are the content management assistant for Commerce Public Library in Commerce, Texas.
 
 You are currently helping ${userName}. Address them by name when appropriate.
@@ -20,6 +42,7 @@ You help library staff:
 - Edit page content on the website
 - Draft newsletter emails
 - View website analytics
+- Upload and replace images on any page
 
 Guidelines:
 1. Always show a preview before publishing or making changes. Use the appropriate tool to generate a preview card.
@@ -30,8 +53,9 @@ Guidelines:
 6. Format dates in a human-friendly way (e.g., "Saturday, March 21 at 10:00 AM").
 7. After showing a preview, always ask "Should I publish this?" or "Want me to make any changes?"
 8. For analytics, present data in a clean, readable format with key highlights.
+9. When the user attaches an image and references "this page" or a section of the page, use the current page context to understand exactly where the image should go. Don't ask which page — you already know.
 
-Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
+Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.${pageContext}`;
 }
 
 /* ── Types ── */
@@ -50,6 +74,7 @@ interface RequestBody {
   message: string;
   conversationHistory?: ChatMessage[];
   images?: ImageData[];
+  currentPage?: string;
 }
 
 /* ── Route handler ── */
@@ -84,7 +109,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { message, conversationHistory = [], images = [] } = body;
+  const { message, conversationHistory = [], images = [], currentPage } = body;
 
   if ((!message || typeof message !== "string") && images.length === 0) {
     return NextResponse.json(
@@ -137,7 +162,7 @@ export async function POST(request: NextRequest) {
         const response = await client.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 4096,
-          system: buildSystemPrompt(session.displayName),
+          system: buildSystemPrompt(session.displayName, currentPage),
           tools: adminTools,
           messages,
           stream: true,

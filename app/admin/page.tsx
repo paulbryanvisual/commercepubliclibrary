@@ -35,7 +35,14 @@ function LivePreview() {
   const navigateTo = (path: string) => {
     setPreviewUrl(path);
     setUrlInput(path);
+    // Broadcast to chat so AI knows which page is being viewed
+    window.dispatchEvent(new CustomEvent("preview-navigate", { detail: path }));
   };
+
+  // Broadcast initial page on mount
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("preview-navigate", { detail: "/" }));
+  }, []);
 
   const handleUrlSubmit = (e: FormEvent) => {
     e.preventDefault();
