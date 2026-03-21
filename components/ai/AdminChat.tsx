@@ -35,6 +35,14 @@ interface Conversation {
   dbId?: string; // Supabase row ID (set after first save)
 }
 
+interface AttachedFile {
+  id: string;
+  file: File;
+  preview?: string; // data URL for image previews
+  base64?: string;  // base64 data for sending to API
+  mediaType?: string;
+}
+
 interface AdminChatProps {
   userId: string;
   userName: string;
@@ -256,9 +264,11 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
@@ -393,29 +403,51 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   /* Send message */
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!text.trim() || isLoading) return;
+      if ((!text.trim() && attachedFiles.length === 0) || isLoading) return;
 
       let convId = activeConversationId;
+      const displayText = text.trim() || (attachedFiles.length > 0 ? `[${attachedFiles.length} file(s) attached]` : "");
       if (!convId) {
-        convId = startConversation(text);
+        convId = startConversation(displayText);
       }
+
+      // Build file info for display
+      const fileNames = attachedFiles.map((f) => f.file.name);
+      const contentWithFiles = fileNames.length > 0
+        ? `${text.trim()}${text.trim() ? "\n" : ""}📎 ${fileNames.join(", ")}`
+        : text.trim();
 
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
-        content: text.trim(),
+        content: contentWithFiles,
         timestamp: new Date(),
       };
+
+      // Collect image data to send to API
+      const images = attachedFiles
+        .filter((f) => f.base64 && f.mediaType)
+        .map((f) => ({
+          base64: f.base64!,
+          mediaType: f.mediaType!,
+          fileName: f.file.name,
+        }));
+
+      // Non-image file names for context
+      const nonImageFiles = attachedFiles
+        .filter((f) => !f.base64)
+        .map((f) => f.file.name);
 
       // Add user message
       setConversations((prev) =>
         prev.map((c) =>
           c.id === convId
-            ? { ...c, title: c.messages.length === 0 ? text.trim().slice(0, 50) : c.title, messages: [...c.messages, userMessage], updatedAt: new Date() }
+            ? { ...c, title: c.messages.length === 0 ? displayText.slice(0, 50) : c.title, messages: [...c.messages, userMessage], updatedAt: new Date() }
             : c
         )
       );
       setInput("");
+      setAttachedFiles([]);
       setIsLoading(true);
 
       try {
@@ -426,12 +458,19 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
           content: m.content,
         }));
 
+        // Add file context to message if non-image files attached
+        let messageText = text.trim();
+        if (nonImageFiles.length > 0) {
+          messageText += `\n\n[Files attached: ${nonImageFiles.join(", ")}]`;
+        }
+
         const res = await fetch("/api/ai/admin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            message: text.trim(),
+            message: messageText || "Please look at the attached image(s).",
             conversationHistory: history,
+            images,
           }),
         });
 
@@ -581,7 +620,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
         setIsLoading(false);
       }
     },
-    [activeConversationId, conversations, isLoading, startConversation, saveConversation]
+    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles]
   );
 
   /* Submit handler */
@@ -598,6 +637,47 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
     }
   };
 
+  /* File processing */
+  const processFiles = useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const allowedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+    for (const file of fileArray) {
+      if (file.size > maxSize) {
+        alert(`File "${file.name}" is too large (max 10MB).`);
+        continue;
+      }
+
+      const id = crypto.randomUUID();
+      const isImage = allowedImageTypes.includes(file.type);
+
+      if (isImage) {
+        // Read as base64 for API + create preview
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const base64 = dataUrl.split(",")[1];
+          setAttachedFiles((prev) => [
+            ...prev,
+            { id, file, preview: dataUrl, base64, mediaType: file.type },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // Non-image files — attach as reference
+        setAttachedFiles((prev) => [
+          ...prev,
+          { id, file },
+        ]);
+      }
+    }
+  }, []);
+
+  const removeAttachedFile = useCallback((id: string) => {
+    setAttachedFiles((prev) => prev.filter((f) => f.id !== id));
+  }, []);
+
   /* Drag & drop handlers */
   const handleDragOver = (e: DragEvent) => {
     e.preventDefault();
@@ -607,10 +687,8 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const names = Array.from(files).map((f) => f.name).join(", ");
-      setInput((prev) => prev + (prev ? "\n" : "") + `[Attached: ${names}]`);
+    if (e.dataTransfer.files.length > 0) {
+      processFiles(e.dataTransfer.files);
     }
   };
 
@@ -835,24 +913,94 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
 
         {/* ─── Input area ─── */}
         <div className="border-t border-gray-200 bg-white p-3 sm:p-4 pb-safe">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                processFiles(e.target.files);
+              }
+              e.target.value = ""; // reset so same file can be re-selected
+            }}
+          />
+
           <form
             onSubmit={handleSubmit}
             className="max-w-3xl mx-auto"
           >
-            <div className="flex items-end gap-2 rounded-2xl bg-gray-50 border border-gray-200 px-4 py-3 focus-within:border-purple focus-within:ring-1 focus-within:ring-purple/30 transition-all">
+            {/* Attached files preview */}
+            {attachedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2 px-1">
+                {attachedFiles.map((af) => (
+                  <div
+                    key={af.id}
+                    className="relative group flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5"
+                  >
+                    {af.preview ? (
+                      <img
+                        src={af.preview}
+                        alt={af.file.name}
+                        className="h-10 w-10 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded bg-gray-200 flex items-center justify-center">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <path d="M14 2v6h6" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 max-w-[120px]">
+                      <p className="text-[11px] font-medium text-gray-700 truncate">{af.file.name}</p>
+                      <p className="text-[10px] text-gray-400">{(af.file.size / 1024).toFixed(0)} KB</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeAttachedFile(af.id)}
+                      className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-gray-600 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label={`Remove ${af.file.name}`}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-end gap-2 rounded-2xl bg-gray-50 border border-gray-200 px-3 py-2.5 focus-within:border-purple focus-within:ring-1 focus-within:ring-purple/30 transition-all">
+              {/* Attach file button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:text-purple hover:bg-purple/10 disabled:opacity-40 transition-colors"
+                aria-label="Attach file"
+                title="Attach photos or files"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
+
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Tell the AI what to update..."
+                placeholder={attachedFiles.length > 0 ? "Add a message about these files..." : "Tell the AI what to update..."}
                 rows={1}
                 className="flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none resize-none leading-relaxed"
                 disabled={isLoading}
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
                 className="shrink-0 rounded-xl bg-purple p-2.5 text-white hover:bg-purple-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 aria-label="Send message"
               >
@@ -862,7 +1010,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
               </button>
             </div>
             <p className="text-center text-[10px] text-gray-400 mt-2">
-              Enter to send &middot; Shift+Enter for new line &middot; Drag and drop images to attach
+              Enter to send &middot; Shift+Enter for new line &middot; Drag &amp; drop or 📎 to attach files
             </p>
           </form>
         </div>

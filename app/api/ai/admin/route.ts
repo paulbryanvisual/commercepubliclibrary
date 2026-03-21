@@ -40,9 +40,16 @@ interface ChatMessage {
   content: string;
 }
 
+interface ImageData {
+  base64: string;
+  mediaType: string;
+  fileName: string;
+}
+
 interface RequestBody {
   message: string;
   conversationHistory?: ChatMessage[];
+  images?: ImageData[];
 }
 
 /* ── Route handler ── */
@@ -77,11 +84,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { message, conversationHistory = [] } = body;
+  const { message, conversationHistory = [], images = [] } = body;
 
-  if (!message || typeof message !== "string") {
+  if ((!message || typeof message !== "string") && images.length === 0) {
     return NextResponse.json(
-      { error: "message is required" },
+      { error: "message or images required" },
       { status: 400 }
     );
   }
@@ -89,12 +96,37 @@ export async function POST(request: NextRequest) {
   const client = new Anthropic({ apiKey });
 
   // Build messages array
+  const historyMessages: Anthropic.MessageParam[] = conversationHistory.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
+
+  // Build the current user message content (text + images)
+  const userContent: Anthropic.ContentBlockParam[] = [];
+
+  // Add images first so Claude sees them before the text
+  for (const img of images) {
+    userContent.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+        data: img.base64,
+      },
+    });
+  }
+
+  // Add the text message
+  if (message) {
+    userContent.push({
+      type: "text",
+      text: message,
+    });
+  }
+
   const messages: Anthropic.MessageParam[] = [
-    ...conversationHistory.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
-    { role: "user", content: message },
+    ...historyMessages,
+    { role: "user", content: userContent.length === 1 && userContent[0].type === "text" ? message : userContent },
   ];
 
   // Use streaming with personalized system prompt
