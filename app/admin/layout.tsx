@@ -1,19 +1,19 @@
+"use client";
+
+import { useEffect } from "react";
+
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="admin-page" data-admin>
-      {/* Hide root layout site chrome on admin pages */}
-      <style>{`
-        [data-admin] ~ *,
-        body > a.skip-to-content { display: none !important; }
-        body > header,
-        body > footer { display: none !important; }
-        body > main { padding: 0 !important; margin: 0 !important; }
-      `}</style>
-      {children}
-    </div>
-  );
+  useEffect(() => {
+    // Hide the root layout site chrome (header, footer, AI chat, skip link)
+    document.body.classList.add("admin-mode");
+    return () => {
+      document.body.classList.remove("admin-mode");
+    };
+  }, []);
+
+  return <>{children}</>;
 }

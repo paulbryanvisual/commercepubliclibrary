@@ -666,129 +666,107 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   };
 
   return (
-    <div className="flex flex-1 bg-gray-50 min-h-0">
-      {/* ─── Mobile sidebar toggle ─── */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed top-[60px] left-3 z-50 lg:hidden rounded-lg bg-white border border-gray-200 p-2 shadow-sm hover:bg-gray-50 transition-colors"
-        aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#534AB7" strokeWidth="2">
-          {sidebarOpen ? (
-            <path d="M18 6L6 18M6 6l12 12" />
-          ) : (
-            <path d="M3 12h18M3 6h18M3 18h18" />
-          )}
-        </svg>
-      </button>
+    <div className="flex flex-col flex-1 bg-gray-50 min-h-0">
+      {/* ─── Chat header with history dropdown ─── */}
+      <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2 flex items-center gap-2">
+        {/* New conversation button */}
+        <button
+          onClick={() => {
+            setActiveConversationId(null);
+            setInput("");
+            setSidebarOpen(false);
+          }}
+          className="flex items-center gap-1.5 rounded-lg bg-purple px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-600 transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New
+        </button>
 
-      {/* ─── Sidebar ─── */}
-      <aside
-        className={`${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed lg:relative lg:translate-x-0 z-40 w-52 h-full bg-white border-r border-gray-200 flex flex-col transition-transform duration-200 ease-in-out`}
-      >
-        {/* Sidebar header */}
-        <div className="p-4 border-b border-gray-100">
+        {/* History dropdown toggle */}
+        <div className="relative">
           <button
-            onClick={() => {
-              setActiveConversationId(null);
-              setInput("");
-              if (window.innerWidth < 1024) setSidebarOpen(false);
-            }}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-purple px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-600 transition-colors"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              sidebarOpen
+                ? "border-purple bg-purple-50 text-purple"
+                : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+            }`}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14" />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            New Conversation
+            History
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transition-transform ${sidebarOpen ? "rotate-180" : ""}`}>
+              <path d="M6 9l6 6 6-6" />
+            </svg>
           </button>
-        </div>
 
-        {/* Conversation history */}
-        <div className="flex-1 overflow-y-auto chat-scrollbar p-3">
-          <p className="px-2 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">History</p>
-          {isLoadingSessions ? (
-            <div className="flex items-center justify-center py-4">
-              <svg className="animate-spin h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-              </svg>
-            </div>
-          ) : conversations.length === 0 ? (
-            <p className="px-2 py-4 text-xs text-gray-400 text-center">No conversations yet</p>
-          ) : (
-            <div className="space-y-1">
-              {conversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  className={`group flex items-center rounded-lg px-3 py-2 cursor-pointer transition-colors ${
-                    conv.id === activeConversationId
-                      ? "bg-purple-50 text-purple"
-                      : "text-gray-600 hover:bg-gray-50"
-                  }`}
-                  onClick={() => {
-                    setActiveConversationId(conv.id);
-                    if (window.innerWidth < 1024) setSidebarOpen(false);
-                  }}
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="shrink-0 mr-2 opacity-50"
-                  >
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                  </svg>
-                  <span className="flex-1 truncate text-xs font-medium">{conv.title}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteConversation(conv.id);
-                    }}
-                    className="hidden group-hover:block shrink-0 ml-1 rounded p-0.5 text-gray-400 hover:text-red hover:bg-red-light transition-colors"
-                    aria-label="Delete conversation"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 6L6 18M6 6l12 12" />
+          {/* History dropdown panel */}
+          {sidebarOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setSidebarOpen(false)} />
+              <div className="absolute left-0 top-full mt-1 z-40 w-72 max-h-80 overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-lg chat-scrollbar">
+                {isLoadingSessions ? (
+                  <div className="flex items-center justify-center py-6">
+                    <svg className="animate-spin h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                     </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
+                  </div>
+                ) : conversations.length === 0 ? (
+                  <p className="px-4 py-6 text-xs text-gray-400 text-center">No conversations yet</p>
+                ) : (
+                  <div className="p-1.5">
+                    {conversations.map((conv) => (
+                      <div
+                        key={conv.id}
+                        className={`group flex items-center rounded-lg px-3 py-2 cursor-pointer transition-colors ${
+                          conv.id === activeConversationId
+                            ? "bg-purple-50 text-purple"
+                            : "text-gray-600 hover:bg-gray-50"
+                        }`}
+                        onClick={() => {
+                          setActiveConversationId(conv.id);
+                          setSidebarOpen(false);
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 mr-2 opacity-50">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                        <span className="flex-1 truncate text-xs font-medium">{conv.title}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteConversation(conv.id);
+                          }}
+                          className="hidden group-hover:block shrink-0 ml-1 rounded p-0.5 text-gray-400 hover:text-red hover:bg-red-light transition-colors"
+                          aria-label="Delete conversation"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
 
-        {/* Sidebar footer — user info */}
-        <div className="p-3 border-t border-gray-100">
-          <div className="flex items-center gap-2 px-2">
-            <div className="h-7 w-7 rounded-full bg-purple flex items-center justify-center">
-              <span className="text-[10px] font-bold text-white uppercase">
-                {userName.charAt(0)}
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-700 truncate">{userName}</p>
-              <p className="text-[10px] text-gray-400">Powered by Claude AI</p>
-            </div>
-          </div>
-        </div>
-      </aside>
+        {/* Spacer */}
+        <div className="flex-1" />
 
-      {/* Sidebar overlay on mobile */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/20 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+        {/* Powered by badge */}
+        <span className="text-[10px] text-gray-400">Powered by Claude AI</span>
+      </div>
 
-      {/* ─── Main chat area ─── */}
+      {/* ─── Chat area ─── */}
       <div
-        className="flex-1 flex flex-col min-w-0"
+        className="flex-1 flex flex-col min-w-0 min-h-0"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

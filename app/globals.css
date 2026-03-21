@@ -63,6 +63,22 @@ html.large-text h3 { font-size: 1.5rem; }
   border-radius: 3px;
 }
 
+/* Admin mode: hide site header, footer, skip link, AI chat bubble */
+body.admin-mode > a.skip-to-content,
+body.admin-mode > header,
+body.admin-mode > footer,
+body.admin-mode > main ~ div,
+body.admin-mode > main ~ button {
+  display: none !important;
+}
+body.admin-mode > main {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+body.admin-mode {
+  background: #f9fafb;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
