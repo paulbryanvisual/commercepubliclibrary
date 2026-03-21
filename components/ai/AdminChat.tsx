@@ -149,6 +149,8 @@ function ToolPreviewCard({
       }
 
       setPublishState("success");
+      // Notify the live preview to refresh
+      window.dispatchEvent(new Event("cms-published"));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to publish";
       setErrorMessage(msg);
@@ -664,11 +666,11 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   };
 
   return (
-    <div className="flex bg-gray-50" style={{ height: "calc(100dvh - 56px)" }}>
+    <div className="flex flex-1 bg-gray-50 min-h-0">
       {/* ─── Mobile sidebar toggle ─── */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed top-[72px] left-3 z-50 lg:hidden rounded-lg bg-white border border-gray-200 p-2 shadow-sm hover:bg-gray-50 transition-colors"
+        className="fixed top-[60px] left-3 z-50 lg:hidden rounded-lg bg-white border border-gray-200 p-2 shadow-sm hover:bg-gray-50 transition-colors"
         aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#534AB7" strokeWidth="2">
@@ -684,7 +686,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
       <aside
         className={`${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed lg:relative lg:translate-x-0 z-40 w-72 h-full bg-white border-r border-gray-200 flex flex-col transition-transform duration-200 ease-in-out`}
+        } fixed lg:relative lg:translate-x-0 z-40 w-64 h-full bg-white border-r border-gray-200 flex flex-col transition-transform duration-200 ease-in-out`}
       >
         {/* Sidebar header */}
         <div className="p-4 border-b border-gray-100">
