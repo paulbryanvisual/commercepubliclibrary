@@ -664,7 +664,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   };
 
   return (
-    <div className="flex h-[calc(100vh-56px)] bg-gray-50">
+    <div className="flex bg-gray-50" style={{ height: "calc(100dvh - 56px)" }}>
       {/* ─── Mobile sidebar toggle ─── */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -926,7 +926,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
         )}
 
         {/* ─── Input area ─── */}
-        <div className="border-t border-gray-200 bg-white p-3 sm:p-4">
+        <div className="border-t border-gray-200 bg-white p-3 sm:p-4 pb-safe">
           <form
             onSubmit={handleSubmit}
             className="max-w-3xl mx-auto"
