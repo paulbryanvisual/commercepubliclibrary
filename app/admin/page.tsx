@@ -20,10 +20,13 @@ const AdminChat = dynamic(() => import("@/components/ai/AdminChat"), {
 });
 
 /* ── Live Preview iframe panel ── */
+type PreviewDevice = "desktop" | "tablet" | "mobile";
+
 function LivePreview() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [previewUrl, setPreviewUrl] = useState("/");
   const [urlInput, setUrlInput] = useState("/");
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
 
   const siteBase = typeof window !== "undefined"
     ? window.location.origin.replace("/admin", "")
@@ -109,16 +112,72 @@ function LivePreview() {
             </svg>
           </button>
         </form>
+
+        {/* Device switcher */}
+        <div className="flex items-center gap-0.5 ml-2 rounded-lg bg-gray-100 p-0.5">
+          <button
+            onClick={() => setDevice("desktop")}
+            className={`rounded-md p-1 transition-colors ${
+              device === "desktop"
+                ? "bg-white text-purple shadow-sm"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+            title="Desktop view"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8M12 17v4" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setDevice("tablet")}
+            className={`rounded-md p-1 transition-colors ${
+              device === "tablet"
+                ? "bg-white text-purple shadow-sm"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+            title="Tablet view"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="4" y="2" width="16" height="20" rx="2" />
+              <path d="M12 18h.01" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setDevice("mobile")}
+            className={`rounded-md p-1 transition-colors ${
+              device === "mobile"
+                ? "bg-white text-purple shadow-sm"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+            title="Mobile view"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="5" y="2" width="14" height="20" rx="2" />
+              <path d="M12 18h.01" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* iframe */}
-      <div className="flex-1 relative">
-        <iframe
-          ref={iframeRef}
-          src={previewUrl}
-          className="absolute inset-0 w-full h-full bg-white"
-          title="Live site preview"
-        />
+      <div className="flex-1 relative flex items-start justify-center overflow-auto bg-gray-100">
+        <div
+          className={`transition-all duration-300 ease-in-out h-full ${
+            device === "desktop"
+              ? "w-full"
+              : device === "tablet"
+              ? "w-[768px] max-w-full my-4 rounded-2xl border border-gray-300 shadow-lg overflow-hidden"
+              : "w-[375px] max-w-full my-4 rounded-[2rem] border-[6px] border-gray-800 shadow-lg overflow-hidden"
+          }`}
+        >
+          <iframe
+            ref={iframeRef}
+            src={previewUrl}
+            className="w-full h-full bg-white"
+            title="Live site preview"
+          />
+        </div>
       </div>
     </>
   );
@@ -309,14 +368,22 @@ function AdminPageInner() {
         {/* Admin top bar */}
         <div className="h-12 shrink-0 border-b border-gray-200 bg-white flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
+            <a
+              href="/"
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+              Back to Website
+            </a>
+            <div className="h-4 w-px bg-gray-200" />
             <div className="h-7 w-7 rounded-lg bg-purple flex items-center justify-center">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
             </div>
-            <div>
-              <p className="text-xs font-semibold text-gray-800">Library CMS</p>
-            </div>
+            <p className="text-xs font-semibold text-gray-800">Library CMS</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-purple-light px-2.5 py-0.5">
@@ -341,7 +408,7 @@ function AdminPageInner() {
         {/* Split layout: Chat left, Live preview right */}
         <div className="flex-1 flex min-h-0">
           {/* Left: Chat panel */}
-          <div className="w-full lg:w-[420px] xl:w-[480px] shrink-0 border-r border-gray-200 flex flex-col min-h-0">
+          <div className="w-full lg:w-[520px] xl:w-[600px] shrink-0 border-r border-gray-200 flex flex-col min-h-0">
             <AdminChat userId={user.id} userName={user.displayName} />
           </div>
 

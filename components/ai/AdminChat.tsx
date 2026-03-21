@@ -686,7 +686,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
       <aside
         className={`${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } fixed lg:relative lg:translate-x-0 z-40 w-64 h-full bg-white border-r border-gray-200 flex flex-col transition-transform duration-200 ease-in-out`}
+        } fixed lg:relative lg:translate-x-0 z-40 w-52 h-full bg-white border-r border-gray-200 flex flex-col transition-transform duration-200 ease-in-out`}
       >
         {/* Sidebar header */}
         <div className="p-4 border-b border-gray-100">
@@ -703,28 +703,6 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
             </svg>
             New Conversation
           </button>
-        </div>
-
-        {/* Quick actions */}
-        <div className="p-3 border-b border-gray-100">
-          <p className="px-2 pb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Quick Actions</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {QUICK_ACTIONS.map((action) => (
-              <button
-                key={action.label}
-                onClick={() => {
-                  if (window.innerWidth < 1024) setSidebarOpen(false);
-                  sendMessage(action.prompt);
-                }}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium text-gray-600 hover:bg-purple-50 hover:text-purple transition-colors text-left"
-              >
-                <span className="text-purple-400">
-                  <QuickActionIcon icon={action.icon} />
-                </span>
-                {action.label}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Conversation history */}
@@ -841,25 +819,9 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
               <h2 className="text-2xl font-semibold text-gray-800 mb-2">
                 Hi {userName}! 👋
               </h2>
-              <p className="text-gray-500 mb-8">
+              <p className="text-gray-500">
                 I can help you manage events, hours, announcements, staff picks, page content, newsletters, and more. Just tell me what you need.
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {QUICK_ACTIONS.slice(0, 6).map((action) => (
-                  <button
-                    key={action.label}
-                    onClick={() => sendMessage(action.prompt)}
-                    className="flex flex-col items-center gap-2 rounded-2xl border border-gray-200 bg-white p-4 hover:border-purple hover:shadow-sm transition-all group"
-                  >
-                    <span className="text-gray-400 group-hover:text-purple transition-colors">
-                      <QuickActionIcon icon={action.icon} />
-                    </span>
-                    <span className="text-xs font-medium text-gray-600 group-hover:text-purple transition-colors">
-                      {action.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         ) : (
