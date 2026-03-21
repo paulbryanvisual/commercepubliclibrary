@@ -40,40 +40,6 @@ interface AdminChatProps {
   userName: string;
 }
 
-/* ── Quick actions ── */
-const QUICK_ACTIONS = [
-  { label: "Add Event", icon: "calendar", prompt: "I need to add a new event." },
-  { label: "Update Hours", icon: "clock", prompt: "I need to update the library hours." },
-  { label: "Post Announcement", icon: "megaphone", prompt: "I want to post a new announcement." },
-  { label: "Staff Picks", icon: "book", prompt: "I want to add a new staff pick." },
-  { label: "Edit Page", icon: "edit", prompt: "I need to edit page content." },
-  { label: "Newsletter", icon: "mail", prompt: "I want to draft a newsletter." },
-  { label: "Analytics", icon: "chart", prompt: "Show me the website analytics." },
-] as const;
-
-/* ── Icon helper ── */
-function QuickActionIcon({ icon }: { icon: string }) {
-  const props = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 };
-  switch (icon) {
-    case "calendar":
-      return <svg {...props}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>;
-    case "clock":
-      return <svg {...props}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>;
-    case "megaphone":
-      return <svg {...props}><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>;
-    case "book":
-      return <svg {...props}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
-    case "edit":
-      return <svg {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
-    case "mail":
-      return <svg {...props}><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>;
-    case "chart":
-      return <svg {...props}><path d="M18 20V10M12 20V4M6 20v-6"/></svg>;
-    default:
-      return null;
-  }
-}
-
 /* ── Tool preview card renderer ── */
 function ToolPreviewCard({
   toolUse,
