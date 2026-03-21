@@ -2,13 +2,14 @@
 
 import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
-import { sampleEvents, audienceConfig, type LibraryEvent, type Audience } from "@/lib/events";
+import { audienceConfig, type LibraryEvent, type Audience } from "@/lib/events";
 
 export default function EventsCarousel() {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [events, setEvents] = useState<LibraryEvent[]>(sampleEvents.slice(0, 7));
+  const [events, setEvents] = useState<LibraryEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch live events from API on mount
+  // Fetch live events from Google Calendar only
   useEffect(() => {
     (async () => {
       try {
@@ -16,11 +17,13 @@ export default function EventsCarousel() {
         if (res.ok) {
           const data = await res.json();
           if (data.events && data.events.length > 0) {
-            setEvents(data.events.slice(0, 7));
+            setEvents(data.events.slice(0, 10));
           }
         }
       } catch {
-        // Keep sample events as fallback
+        // No events available
+      } finally {
+        setIsLoading(false);
       }
     })();
   }, []);
@@ -36,6 +39,9 @@ export default function EventsCarousel() {
   };
 
   const carouselEvents = events;
+
+  // Don't render section at all if no events and done loading
+  if (!isLoading && carouselEvents.length === 0) return null;
 
   return (
     <section className="relative">

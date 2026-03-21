@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { fetchGoogleCalendarEvents } from "@/lib/googleCalendar";
-import { sampleEvents } from "@/lib/events";
 
 export const revalidate = 300; // ISR: revalidate every 5 minutes
 
 /**
  * GET /api/events
- * Returns events from Google Calendar, falling back to sample data.
+ * Returns events from the Commerce Public Library Google Calendar only.
  */
 export async function GET() {
-  const gcalEvents = await fetchGoogleCalendarEvents();
+  const events = await fetchGoogleCalendarEvents(30, 90);
 
-  // Use Google Calendar events if available, otherwise fall back to samples
-  const events = gcalEvents.length > 0 ? gcalEvents : sampleEvents;
-
-  return NextResponse.json({ events, source: gcalEvents.length > 0 ? "google_calendar" : "sample_data" });
+  return NextResponse.json({
+    events,
+    source: "google_calendar",
+    count: events.length,
+  });
 }
