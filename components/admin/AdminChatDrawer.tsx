@@ -46,10 +46,13 @@ export default function AdminChatDrawer({
   const startRef = useRef(0);
   const startSizeRef = useRef(0);
 
-  // Listen for CMS changes → refresh the page
+  // Listen for CMS changes → refresh the page to show updated content
   useEffect(() => {
     const handler = () => {
-      setTimeout(() => router.refresh(), 300);
+      // Delay to let DB write settle, then re-fetch server component data
+      setTimeout(() => {
+        router.refresh();
+      }, 500);
     };
     window.addEventListener("cms-published", handler);
     return () => window.removeEventListener("cms-published", handler);

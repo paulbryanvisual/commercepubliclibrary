@@ -182,9 +182,10 @@ function AdminPageInner() {
     );
   }
 
-  /* ─── Authenticated: redirect to preview mode ─── */
+  /* ─── Authenticated: redirect to homepage preview mode ─── */
   if (user) {
-    router.push("/?preview=true");
+    // Use ?preview=true for the homepage since /admin is the login page
+    window.location.href = "/?preview=true";
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex items-center gap-2 text-gray-400">

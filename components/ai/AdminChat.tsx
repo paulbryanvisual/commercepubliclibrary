@@ -905,7 +905,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
               </p>
 
               {/* Quick action buttons */}
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="flex flex-col gap-1.5">
                 {[
                   { label: "Add Event", icon: <><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>, prompt: "I need to add a new event." },
                   { label: "Update Hours", icon: <><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>, prompt: "I need to update the library hours." },
@@ -917,9 +917,9 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                   <button
                     key={action.label}
                     onClick={() => sendMessage(action.prompt)}
-                    className="flex flex-col items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-4 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all"
+                    className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all text-left"
                   >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
                       {action.icon}
                     </svg>
                     <span className="text-xs font-medium">{action.label}</span>

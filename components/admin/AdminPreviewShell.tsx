@@ -130,7 +130,10 @@ function PreviewToolbar({
   onTogglePanel: () => void;
   onLogout: () => void;
 }) {
-  const router = useRouter();
+  const pathname = usePathname();
+
+  // Live page URL = current path without ?preview=true
+  const liveUrl = pathname === "/" ? "/" : pathname;
 
   return (
     <div className="fixed top-0 left-0 right-0 h-10 z-50 bg-white border-b border-gray-200 shadow-sm flex items-center justify-between px-4 gap-3">
@@ -157,7 +160,7 @@ function PreviewToolbar({
         {/* Preview mode badge */}
         <div className="flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-          <span className="text-[10px] font-semibold text-amber-700">PREVIEW MODE</span>
+          <span className="text-[10px] font-semibold text-amber-700">EDITING</span>
         </div>
 
         <div className="h-4 w-px bg-gray-200" />
@@ -207,12 +210,17 @@ function PreviewToolbar({
             {user.displayName}
           </span>
         </div>
-        <button
-          onClick={() => router.push("/admin")}
-          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+        <a
+          href={liveUrl}
+          className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50 transition-colors"
         >
-          Exit Preview
-        </button>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+          View Live
+        </a>
         <button
           onClick={onLogout}
           className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50 transition-colors"
