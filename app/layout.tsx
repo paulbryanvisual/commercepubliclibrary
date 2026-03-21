@@ -3,7 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
-import AIChatButton from "@/components/ai/AIChatButton";
+import { Suspense } from "react";
+import AdminPreviewShell from "@/components/admin/AdminPreviewShell";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -55,7 +56,7 @@ export default function RootLayout({
           {children}
         </main>
         <Footer />
-        <AIChatButton />
+        <Suspense><AdminPreviewShell /></Suspense>
       </body>
     </html>
   );

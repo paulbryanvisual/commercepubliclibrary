@@ -79,6 +79,11 @@ body.admin-mode {
   background: #f9fafb;
 }
 
+/* Preview mode: add space for the floating admin toolbar at top */
+body.preview-mode > header {
+  margin-top: 40px;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

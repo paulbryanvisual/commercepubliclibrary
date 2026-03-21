@@ -46,6 +46,7 @@ interface AttachedFile {
 interface AdminChatProps {
   userId: string;
   userName: string;
+  currentPage?: string;
 }
 
 /* ── Tool preview card renderer ── */
@@ -307,7 +308,7 @@ function TypingIndicator() {
 }
 
 /* ── Main component ── */
-export default function AdminChat({ userId: _userId, userName }: AdminChatProps) {
+export default function AdminChat({ userId: _userId, userName, currentPage }: AdminChatProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -316,22 +317,17 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-  const [previewPage, setPreviewPage] = useState("/");
+  const [previewPage, setPreviewPage] = useState(currentPage || "/");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  /* Listen for preview page changes */
+  /* Sync preview page from prop (direct integration — no iframe) */
   useEffect(() => {
-    const handler = (e: Event) => {
-      const path = (e as CustomEvent).detail;
-      if (typeof path === "string") setPreviewPage(path);
-    };
-    window.addEventListener("preview-navigate", handler);
-    return () => window.removeEventListener("preview-navigate", handler);
-  }, []);
+    if (currentPage) setPreviewPage(currentPage);
+  }, [currentPage]);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId) || null;
 
