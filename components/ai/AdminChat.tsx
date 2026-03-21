@@ -1059,7 +1059,7 @@ export default function AdminChat({ userId: _userId, userName }: AdminChatProps)
               </div>
             )}
 
-            <div className="flex items-end gap-2 rounded-2xl bg-gray-50 border border-gray-200 px-3 py-2.5 focus-within:border-purple focus-within:ring-1 focus-within:ring-purple/30 transition-all">
+            <div className="flex items-end gap-2 rounded-2xl bg-gray-50 border border-gray-200 px-3 py-2.5 transition-all">
               {/* Attach file button */}
               <button
                 type="button"
