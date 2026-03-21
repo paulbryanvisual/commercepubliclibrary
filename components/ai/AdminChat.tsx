@@ -57,78 +57,108 @@ function ToolPreviewCard({
   onEdit?: (instruction: string) => void;
 }) {
   const input = toolUse.input;
-  const [publishState, setPublishState] = useState<
-    "idle" | "loading" | "success" | "error"
+  // Draft flow: idle → saving (auto-save as draft) → draft → publishing → published
+  const [state, setState] = useState<
+    "idle" | "saving" | "draft" | "publishing" | "published" | "discarded" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [draftMeta, setDraftMeta] = useState<{ table: string; id: string } | null>(null);
 
   const cardHeader = () => {
     switch (toolUse.name) {
-      case "create_event":
-        return "New Event Preview";
-      case "update_event":
-        return "Event Update Preview";
-      case "delete_event":
-        return "Delete Event";
-      case "create_announcement":
-        return "Announcement Preview";
-      case "update_hours":
-        return "Hours Update Preview";
-      case "add_closure":
-        return "Closure Preview";
-      case "create_staff_pick":
-        return "Staff Pick Preview";
-      case "update_page_content":
-        return "Page Content Preview";
-      case "upload_image":
-        return "Image Upload";
-      case "send_newsletter_draft":
-        return "Newsletter Draft Preview";
-      case "get_analytics":
-        return "Analytics Report";
-      default:
-        return toolUse.name;
+      case "create_event": return "New Event";
+      case "update_event": return "Event Update";
+      case "delete_event": return "Delete Event";
+      case "create_announcement": return "Announcement";
+      case "update_hours": return "Hours Update";
+      case "add_closure": return "Closure";
+      case "create_staff_pick": return "Staff Pick";
+      case "update_page_content": return "Page Content";
+      case "upload_image": return "Image Upload";
+      case "send_newsletter_draft": return "Newsletter Draft";
+      case "get_analytics": return "Analytics Report";
+      default: return toolUse.name;
     }
   };
 
-  const badgeColor = () => {
-    switch (toolUse.name) {
-      case "delete_event":
-        return "bg-red-light text-red";
-      case "create_announcement":
-        return "bg-amber-light text-amber-text";
-      default:
-        return "bg-purple-light text-purple";
-    }
-  };
+  // Auto-save as draft when the card first appears
+  useEffect(() => {
+    if (state !== "idle") return;
+    // Don't auto-save analytics or non-content tools
+    if (["get_analytics", "send_newsletter_draft", "upload_image"].includes(toolUse.name)) return;
+
+    const saveDraft = async () => {
+      setState("saving");
+      try {
+        const res = await fetch("/api/ai/admin/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            toolName: toolUse.name,
+            toolInput: toolUse.input,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || `Error ${res.status}`);
+
+        // Store draft metadata for later publish
+        if (data.draft?.table && data.draft?.id) {
+          setDraftMeta({ table: data.draft.table, id: data.draft.id });
+        }
+        setState("draft");
+        // Refresh preview to show the draft
+        window.dispatchEvent(new Event("cms-published"));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "Failed to save draft";
+        setErrorMessage(msg);
+        setState("error");
+      }
+    };
+    saveDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handlePublish = async () => {
-    setPublishState("loading");
+    if (!draftMeta) return;
+    setState("publishing");
     setErrorMessage("");
-
     try {
-      const res = await fetch("/api/ai/admin/execute", {
+      const res = await fetch("/api/cms/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          toolName: toolUse.name,
-          toolInput: toolUse.input,
+          action: "publish",
+          table: draftMeta.table,
+          id: draftMeta.id,
         }),
       });
-
       const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || `Error ${res.status}`);
-      }
-
-      setPublishState("success");
-      // Notify the live preview to refresh
+      if (!res.ok || !data.success) throw new Error(data.error || `Error ${res.status}`);
+      setState("published");
       window.dispatchEvent(new Event("cms-published"));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to publish";
       setErrorMessage(msg);
-      setPublishState("error");
+      setState("error");
+    }
+  };
+
+  const handleDiscard = async () => {
+    if (!draftMeta) return;
+    try {
+      await fetch("/api/cms/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "discard",
+          table: draftMeta.table,
+          id: draftMeta.id,
+        }),
+      });
+      setState("discarded");
+      window.dispatchEvent(new Event("cms-published"));
+    } catch {
+      // Best effort
     }
   };
 
@@ -137,21 +167,31 @@ function ToolPreviewCard({
     onEdit?.(`I want to make changes to the ${title} — `);
   };
 
+  const statusBadge = () => {
+    switch (state) {
+      case "saving": return <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Saving draft...</span>;
+      case "draft": return <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Draft — Preview it →</span>;
+      case "publishing": return <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Publishing...</span>;
+      case "published": return <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">✓ Live</span>;
+      case "discarded": return <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500">Discarded</span>;
+      case "error": return <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">Error</span>;
+      default: return null;
+    }
+  };
+
   return (
-    <div className="mt-3 rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+    <div className={`mt-3 rounded-xl border overflow-hidden shadow-sm ${
+      state === "draft" ? "border-amber-300 bg-amber-50/30" :
+      state === "published" ? "border-green-300 bg-white" :
+      state === "discarded" ? "border-gray-200 bg-gray-50 opacity-60" :
+      "border-gray-200 bg-white"
+    }`}>
       {/* Card header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeColor()}`}>
+        <span className="inline-flex items-center rounded-full bg-purple-light px-2.5 py-0.5 text-xs font-medium text-purple">
           {cardHeader()}
         </span>
-        {publishState === "success" && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M20 6L9 17l-5-5" />
-            </svg>
-            Published!
-          </span>
-        )}
+        {statusBadge()}
       </div>
 
       {/* Card body */}
@@ -185,52 +225,63 @@ function ToolPreviewCard({
       </div>
 
       {/* Error message */}
-      {publishState === "error" && errorMessage && (
+      {state === "error" && errorMessage && (
         <div className="mx-4 mb-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {errorMessage}
         </div>
       )}
 
       {/* Card actions */}
-      {toolUse.name !== "get_analytics" && (
+      {!["get_analytics", "send_newsletter_draft", "upload_image"].includes(toolUse.name) && state !== "discarded" && (
         <div className="flex gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/30">
-          {publishState === "success" ? (
+          {state === "published" ? (
             <span className="rounded-lg bg-green-100 px-4 py-2 text-xs font-semibold text-green-700 flex items-center gap-1.5">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M20 6L9 17l-5-5" />
               </svg>
-              Published
+              Published to live site
             </span>
-          ) : (
-            <button
-              onClick={handlePublish}
-              disabled={publishState === "loading"}
-              className="rounded-lg bg-purple px-4 py-2 text-xs font-semibold text-white hover:bg-purple-600 disabled:opacity-60 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
-            >
-              {publishState === "loading" ? (
-                <>
-                  <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Publishing...
-                </>
-              ) : publishState === "error" ? (
-                "Retry"
-              ) : (
-                "Publish"
-              )}
-            </button>
-          )}
-          {publishState !== "success" && (
-            <button
-              onClick={handleEdit}
-              disabled={publishState === "loading"}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-60 transition-colors"
-            >
-              Edit
-            </button>
-          )}
+          ) : state === "draft" ? (
+            <>
+              <button
+                onClick={handlePublish}
+                className="rounded-lg bg-green-600 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700 transition-colors flex items-center gap-1.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
+                </svg>
+                Publish to Live Site
+              </button>
+              <button
+                onClick={handleEdit}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={handleDiscard}
+                className="rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 transition-colors"
+              >
+                Discard
+              </button>
+            </>
+          ) : state === "saving" ? (
+            <span className="rounded-lg bg-gray-100 px-4 py-2 text-xs font-semibold text-gray-500 flex items-center gap-1.5">
+              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Saving to preview...
+            </span>
+          ) : state === "publishing" ? (
+            <span className="rounded-lg bg-purple-100 px-4 py-2 text-xs font-semibold text-purple flex items-center gap-1.5">
+              <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Publishing...
+            </span>
+          ) : null}
         </div>
       )}
     </div>

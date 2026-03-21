@@ -38,6 +38,27 @@ async function logAudit(
   });
 }
 
+/** Map tool names to their Supabase table names */
+function getTableForTool(toolName: string): string | null {
+  switch (toolName) {
+    case "create_event":
+    case "update_event":
+      return "events";
+    case "create_announcement":
+      return "announcements";
+    case "create_staff_pick":
+      return "staff_picks";
+    case "add_closure":
+      return "closures";
+    case "update_hours":
+      return "hours_overrides";
+    case "update_page_content":
+      return "page_content";
+    default:
+      return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   // Auth check — now returns full session payload with user info
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -71,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     switch (toolName) {
       case "create_event":
-        action = "Created event";
+        action = "Created event (draft)";
         result = await addEvent(
           toolInput as Parameters<typeof addEvent>[0]
         );
@@ -92,35 +113,35 @@ export async function POST(request: NextRequest) {
         break;
 
       case "create_announcement":
-        action = "Created announcement";
+        action = "Created announcement (draft)";
         result = await addAnnouncement(
           toolInput as Parameters<typeof addAnnouncement>[0]
         );
         break;
 
       case "update_hours":
-        action = "Updated hours";
+        action = "Updated hours (draft)";
         result = await updateHours(
           toolInput as Parameters<typeof updateHours>[0]
         );
         break;
 
       case "add_closure":
-        action = "Added closure";
+        action = "Added closure (draft)";
         result = await addClosure(
           toolInput as Parameters<typeof addClosure>[0]
         );
         break;
 
       case "create_staff_pick":
-        action = "Created staff pick";
+        action = "Created staff pick (draft)";
         result = await addStaffPick(
           toolInput as Parameters<typeof addStaffPick>[0]
         );
         break;
 
       case "update_page_content":
-        action = "Updated page content";
+        action = "Updated page content (draft)";
         result = await updatePageContent(
           toolInput as Parameters<typeof updatePageContent>[0]
         );
@@ -173,7 +194,21 @@ export async function POST(request: NextRequest) {
       result
     );
 
-    return NextResponse.json({ success: true, result });
+    // Include table name and item ID for the publish step
+    const table = getTableForTool(toolName);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const itemId = (result as any)?.id || null;
+
+    return NextResponse.json({
+      success: true,
+      result,
+      // Draft metadata for publish flow
+      draft: {
+        table,
+        id: itemId,
+        status: "draft",
+      },
+    });
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "An unknown error occurred";

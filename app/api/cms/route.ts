@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getData } from "@/lib/cms/dataStore";
+import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
 
 export const runtime = "nodejs";
 
@@ -18,8 +18,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") as CMSType | null;
+    const preview = searchParams.get("preview") === "true";
 
-    const data = await getData();
+    // Preview mode shows drafts + published; normal mode shows published only
+    const data = preview ? await getAllData() : await getPublishedData();
 
     if (type) {
       if (!VALID_TYPES.includes(type)) {

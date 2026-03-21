@@ -180,7 +180,7 @@ function LivePreview() {
         >
           <iframe
             ref={iframeRef}
-            src={previewUrl}
+            src={`${previewUrl}${previewUrl.includes("?") ? "&" : "?"}preview=true`}
             className="w-full h-full bg-white"
             title="Live site preview"
           />

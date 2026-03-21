@@ -1,10 +1,15 @@
 /**
  * CMS data store backed by Supabase.
+ * Supports draft/publish workflow: content is created as 'draft' and
+ * only shown on the live site when status is 'published'.
+ * The admin preview shows both drafts and published content.
  */
 
 import { supabase } from "@/lib/supabase";
 
 /* ── Types ── */
+
+export type ContentStatus = "draft" | "published";
 
 export interface CMSEvent {
   id: string;
@@ -18,6 +23,7 @@ export interface CMSEvent {
   recurring: string;
   imageUrl?: string;
   cancelled: boolean;
+  status: ContentStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +36,7 @@ export interface CMSAnnouncement {
   startsAt: string;
   expiresAt?: string;
   pinned: boolean;
+  status: ContentStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +50,7 @@ export interface CMSStaffPick {
   review: string;
   category: string;
   imageUrl?: string;
+  status: ContentStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +62,7 @@ export interface CMSClosure {
   endDate: string;
   specialHours?: string;
   message?: string;
+  status: ContentStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,7 +74,17 @@ export interface CMSHoursOverride {
   close: string;
   closed: boolean;
   effectiveDate?: string;
+  status: ContentStatus;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface CMSPageContent {
+  id: string;
+  page: string;
+  section: string;
+  content: string;
+  status: ContentStatus;
   updatedAt: string;
 }
 
@@ -94,6 +113,7 @@ function mapEvent(row: any): CMSEvent {
     recurring: row.recurring || "none",
     imageUrl: row.image,
     cancelled: false,
+    status: row.status || "published",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -109,6 +129,7 @@ function mapAnnouncement(row: any): CMSAnnouncement {
     startsAt: row.created_at,
     expiresAt: undefined,
     pinned: false,
+    status: row.status || "published",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -125,6 +146,7 @@ function mapStaffPick(row: any): CMSStaffPick {
     review: row.blurb,
     category: row.genre,
     imageUrl: row.cover_url,
+    status: row.status || "published",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -137,6 +159,7 @@ function mapClosure(row: any): CMSClosure {
     title: row.reason || "Closure",
     startDate: row.date,
     endDate: row.date,
+    status: row.status || "published",
     createdAt: row.created_at,
     updatedAt: row.created_at,
   };
@@ -150,22 +173,66 @@ function mapHoursOverride(row: any): CMSHoursOverride {
     open: row.open_time || "09:00",
     close: row.close_time || "18:00",
     closed: row.closed || false,
+    status: row.status || "published",
     createdAt: row.updated_at,
     updatedAt: row.updated_at,
   };
 }
 
-/* ── Read all CMS data ── */
+/* ── Read CMS data ── */
 
+/**
+ * Get published content only (for the live public site).
+ */
+export async function getPublishedData(): Promise<CMSData> {
+  return fetchData("published");
+}
+
+/**
+ * Get all content including drafts (for admin preview).
+ */
+export async function getAllData(): Promise<CMSData> {
+  return fetchData("all");
+}
+
+/**
+ * Legacy alias — returns published data only.
+ */
 export async function getData(): Promise<CMSData> {
+  return getPublishedData();
+}
+
+async function fetchData(mode: "published" | "all"): Promise<CMSData> {
+  // Build queries with optional status filter
+  let eventsQuery = supabase.from("events").select("*").order("date", { ascending: true });
+  let announcementsQuery = supabase.from("announcements").select("*");
+  let picksQuery = supabase.from("staff_picks").select("*");
+  let closuresQuery = supabase.from("closures").select("*").order("date", { ascending: true });
+  let hoursQuery = supabase.from("hours_overrides").select("*");
+  let pageQuery = supabase.from("page_content").select("*");
+
+  if (mode === "published") {
+    // Filter for published only — also include items without status column (backwards compat)
+    eventsQuery = eventsQuery.eq("status", "published");
+    announcementsQuery = announcementsQuery.eq("status", "published").eq("active", true);
+    picksQuery = picksQuery.eq("status", "published").eq("active", true);
+    closuresQuery = closuresQuery.eq("status", "published");
+    hoursQuery = hoursQuery.eq("status", "published");
+    pageQuery = pageQuery.eq("status", "published");
+  } else {
+    // For preview: show all (draft + published)
+    announcementsQuery = announcementsQuery.eq("active", true);
+    picksQuery = picksQuery.eq("active", true);
+  }
+
   const [eventsRes, announcementsRes, picksRes, closuresRes, hoursRes, pageRes] =
     await Promise.all([
-      supabase.from("events").select("*").order("date", { ascending: true }),
-      supabase.from("announcements").select("*").eq("active", true),
-      supabase.from("staff_picks").select("*").eq("active", true),
-      supabase.from("closures").select("*").order("date", { ascending: true }),
-      supabase.from("hours_overrides").select("*"),
-      supabase.from("page_content").select("*"),
+      eventsQuery,
+      announcementsQuery,
+      picksQuery,
+      closuresQuery,
+      hoursQuery,
+      pageQuery,
     ]);
 
   const pageContent: Record<string, Record<string, string>> = {};
@@ -215,6 +282,7 @@ export async function addEvent(input: {
       audience: input.audience,
       recurring: input.recurring,
       image: input.image_url,
+      status: "draft",
     })
     .select()
     .single();
@@ -286,6 +354,7 @@ export async function addAnnouncement(input: {
       title: input.title,
       body: input.body,
       type: input.type === "news" ? "info" : input.type,
+      status: "draft",
     })
     .select()
     .single();
@@ -315,6 +384,7 @@ export async function addStaffPick(input: {
       blurb: input.review,
       genre: input.category,
       cover_url: input.image_url,
+      status: "draft",
     })
     .select()
     .single();
@@ -337,6 +407,7 @@ export async function addClosure(input: {
     .insert({
       date: input.start_date,
       reason: input.title + (input.message ? ` — ${input.message}` : ""),
+      status: "draft",
     })
     .select()
     .single();
@@ -367,6 +438,7 @@ export async function updateHours(input: {
           open_time: h.open || "09:00",
           close_time: h.close || "18:00",
           closed: h.closed || false,
+          status: "draft",
           updated_at: new Date().toISOString(),
         },
         { onConflict: "day_of_week" }
@@ -387,19 +459,93 @@ export async function updatePageContent(input: {
   page: string;
   section: string;
   content: string;
-}): Promise<{ page: string; section: string; content: string }> {
-  const { error } = await supabase
+}): Promise<CMSPageContent> {
+  const { data, error } = await supabase
     .from("page_content")
     .upsert(
       {
         page: input.page,
         section: input.section,
         content: input.content,
+        status: "draft",
         updated_at: new Date().toISOString(),
       },
       { onConflict: "page,section" }
-    );
+    )
+    .select()
+    .single();
 
   if (error) throw new Error(error.message);
-  return { page: input.page, section: input.section, content: input.content };
+  return {
+    id: data.id,
+    page: data.page,
+    section: data.section,
+    content: data.content,
+    status: data.status || "draft",
+    updatedAt: data.updated_at,
+  };
+}
+
+/* ── Publish / Discard ── */
+
+/** Publish a single draft item (flip status from 'draft' to 'published'). */
+export async function publishItem(
+  table: string,
+  id: string
+): Promise<void> {
+  const { error } = await supabase
+    .from(table)
+    .update({ status: "published", updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+}
+
+/** Publish all drafts across all tables. */
+export async function publishAllDrafts(): Promise<{ count: number }> {
+  const tables = ["events", "announcements", "staff_picks", "closures", "hours_overrides", "page_content"];
+  let count = 0;
+
+  for (const table of tables) {
+    const { data } = await supabase
+      .from(table)
+      .update({ status: "published", updated_at: new Date().toISOString() })
+      .eq("status", "draft")
+      .select("id");
+
+    count += (data || []).length;
+  }
+
+  return { count };
+}
+
+/** Discard (delete) a draft item. */
+export async function discardDraft(
+  table: string,
+  id: string
+): Promise<void> {
+  const { error } = await supabase
+    .from(table)
+    .delete()
+    .eq("id", id)
+    .eq("status", "draft");
+
+  if (error) throw new Error(error.message);
+}
+
+/** Get count of pending drafts across all tables. */
+export async function getDraftCount(): Promise<number> {
+  const tables = ["events", "announcements", "staff_picks", "closures", "hours_overrides", "page_content"];
+  let count = 0;
+
+  for (const table of tables) {
+    const { count: c } = await supabase
+      .from(table)
+      .select("id", { count: "exact", head: true })
+      .eq("status", "draft");
+
+    count += c || 0;
+  }
+
+  return count;
 }
