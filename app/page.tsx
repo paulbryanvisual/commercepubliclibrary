@@ -4,6 +4,10 @@ import { LIBRARY_HOURS } from "@/lib/hours";
 import StatusPill from "@/components/ui/StatusPill";
 import HeroIllustration from "@/components/ui/HeroIllustration";
 import EventsCarousel from "@/components/events/EventsCarousel";
+import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
+
+// Revalidate every 60 seconds so CMS changes appear quickly
+export const revalidate = 60;
 
 // ─── Quick actions ───
 
@@ -99,7 +103,27 @@ const stats = [
   { value: "1890s", label: "Historic building" },
 ];
 
-export default function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: { preview?: string };
+}) {
+  const isPreview = searchParams?.preview === "true";
+  const cms = isPreview ? await getAllData() : await getPublishedData();
+  const cmsPageContent = cms.pageContent?.home || {};
+
+  // Use CMS hero image if set, otherwise use default illustration
+  const heroImageUrl = cmsPageContent.hero_image || cmsPageContent.hero || null;
+  const heroTitle = cmsPageContent.hero_title || null;
+  const heroSubtitle = cmsPageContent.hero_subtitle || null;
+  const heroDescription = cmsPageContent.hero_description || null;
+
+  // Use CMS staff picks if any exist, otherwise use defaults
+  const cmsStaffPicks = cms.staffPicks.length > 0 ? cms.staffPicks : null;
+
+  // Use CMS announcements
+  const activeAnnouncements = cms.announcements;
+
   const currentDayIndex = new Date().getDay();
   const mappedIndex = currentDayIndex === 0 ? 6 : currentDayIndex - 1;
 
@@ -117,13 +141,12 @@ export default function HomePage() {
             {/* Left: Text */}
             <div className="relative z-10">
               <h1 className="text-4xl md:text-[52px] font-semibold text-white leading-[1.1] mb-5 tracking-tight">
-                Your library.
+                {heroTitle || "Your library."}
                 <br />
-                <span className="text-primary-200">Your community.</span>
+                <span className="text-primary-200">{heroSubtitle || "Your community."}</span>
               </h1>
               <p className="text-lg md:text-xl text-primary-100/90 mb-8 max-w-md leading-relaxed">
-                Free books, ebooks, events, passport services, and more — for
-                everyone in Hunt County.
+                {heroDescription || "Free books, ebooks, events, passport services, and more — for everyone in Hunt County."}
               </p>
 
               {/* Search bar */}
@@ -170,7 +193,11 @@ export default function HomePage() {
             {/* Right: Photo */}
             <div className="hidden lg:block relative">
               <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-black/20 border border-white/10">
-                <HeroIllustration className="w-full h-auto" />
+                {heroImageUrl ? (
+                  <img src={heroImageUrl} alt="Commerce Public Library" className="w-full h-auto object-cover" />
+                ) : (
+                  <HeroIllustration className="w-full h-auto" />
+                )}
               </div>
               {/* Floating card overlay */}
               <div className="absolute -bottom-4 -left-8 rounded-xl bg-white p-4 shadow-lg border border-gray-100 animate-fade-in">
@@ -207,6 +234,31 @@ export default function HomePage() {
           </svg>
         </div>
       </section>
+
+      {/* ─── ANNOUNCEMENTS (from CMS) ─── */}
+      {activeAnnouncements.length > 0 && (
+        <section className="mx-auto max-w-site px-4 md:px-8 mb-4 relative z-10">
+          {activeAnnouncements.map((a) => (
+            <div
+              key={a.id}
+              className={`rounded-xl p-4 mb-2 flex items-start gap-3 ${
+                a.type === "alert" ? "bg-red-50 border border-red-200 text-red-800" :
+                a.type === "closure" ? "bg-amber-50 border border-amber-200 text-amber-800" :
+                a.type === "celebration" ? "bg-purple-50 border border-purple-200 text-purple-800" :
+                "bg-blue-50 border border-blue-200 text-blue-800"
+              } ${a.status === "draft" && isPreview ? "ring-2 ring-amber-400 ring-dashed" : ""}`}
+            >
+              <div className="flex-1">
+                <p className="font-semibold text-sm">{a.title}</p>
+                <p className="text-sm mt-0.5">{a.body}</p>
+              </div>
+              {a.status === "draft" && isPreview && (
+                <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">DRAFT</span>
+              )}
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* ─── QUICK ACTIONS ─── */}
       <section className="mx-auto max-w-site px-4 md:px-8 -mt-2 relative z-10">
@@ -373,35 +425,48 @@ export default function HomePage() {
             <h2 className="text-h2 text-white">Staff Picks</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {staffPicks.map((pick, i) => (
-              <div
-                key={i}
-                className="group rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10 p-5 hover:bg-white/15 hover:border-white/20 transition-all"
-              >
-                {/* Book cover image */}
-                <div className="h-44 rounded-xl mb-4 overflow-hidden relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={pick.cover}
-                    alt={`Cover of ${pick.title}`}
-                    className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
-                  />
-                  <div className="absolute left-0 top-0 bottom-0 w-3 bg-black/10" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+            {(cmsStaffPicks || staffPicks).map((pick, i) => {
+              // Normalize CMS vs hardcoded format
+              const title = "staffName" in pick ? pick.title : pick.title;
+              const author = "staffName" in pick ? pick.author : pick.author;
+              const review = "staffName" in pick ? pick.review : (pick as typeof staffPicks[0]).quote;
+              const name = "staffName" in pick ? pick.staffName : (pick as typeof staffPicks[0]).librarian;
+              const cover = "staffName" in pick ? (pick.imageUrl || `https://covers.openlibrary.org/b/isbn/${pick.isbn}-M.jpg`) : (pick as typeof staffPicks[0]).cover;
+              const isDraft = "status" in pick && pick.status === "draft";
+
+              return (
+                <div
+                  key={i}
+                  className={`group rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10 p-5 hover:bg-white/15 hover:border-white/20 transition-all ${isDraft && isPreview ? "ring-2 ring-amber-400 ring-dashed" : ""}`}
+                >
+                  {isDraft && isPreview && (
+                    <span className="inline-block rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-900 mb-2">DRAFT</span>
+                  )}
+                  {/* Book cover image */}
+                  <div className="h-44 rounded-xl mb-4 overflow-hidden relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={cover}
+                      alt={`Cover of ${title}`}
+                      className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                    />
+                    <div className="absolute left-0 top-0 bottom-0 w-3 bg-black/10" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-white mb-0.5">
+                    {title}
+                  </h3>
+                  <p className="text-xs text-primary-200 mb-2">{author}</p>
+                  <p className="text-xs text-white/60 italic leading-relaxed line-clamp-3">
+                    &ldquo;{review}&rdquo;
+                  </p>
+                  <p className="text-[11px] text-primary-300 mt-2">
+                    — {name}
+                  </p>
                 </div>
-                <h3 className="text-sm font-semibold text-white mb-0.5">
-                  {pick.title}
-                </h3>
-                <p className="text-xs text-primary-200 mb-2">{pick.author}</p>
-                <p className="text-xs text-white/60 italic leading-relaxed line-clamp-3">
-                  &ldquo;{pick.quote}&rdquo;
-                </p>
-                <p className="text-[11px] text-primary-300 mt-2">
-                  — {pick.librarian}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
