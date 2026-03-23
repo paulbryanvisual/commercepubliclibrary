@@ -79,6 +79,7 @@ interface AdminChatProps {
   userId: string;
   userName: string;
   currentPage?: string;
+  position?: "left" | "bottom";
 }
 
 /* ── Image Search Card ── */
@@ -463,7 +464,8 @@ function TypingIndicator() {
 }
 
 /* ── Main component ── */
-export default function AdminChat({ userId: _userId, userName, currentPage }: AdminChatProps) {
+export default function AdminChat({ userId: _userId, userName, currentPage, position = "left" }: AdminChatProps) {
+  const isBottom = position === "bottom";
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -475,6 +477,8 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
   const [previewPage, setPreviewPage] = useState(currentPage || "/");
   const [isCapturing, setIsCapturing] = useState(false);
   const [autoScreenshot, setAutoScreenshot] = useState(true); // auto-capture with every message
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const historyBtnRef = useRef<HTMLButtonElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -994,7 +998,14 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
         {/* History dropdown toggle */}
         <div className="relative">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            ref={historyBtnRef}
+            onClick={() => {
+              if (!sidebarOpen && historyBtnRef.current) {
+                const rect = historyBtnRef.current.getBoundingClientRect();
+                setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+              }
+              setSidebarOpen(!sidebarOpen);
+            }}
             className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
               sidebarOpen
                 ? "border-purple bg-purple-50 text-purple"
@@ -1010,11 +1021,13 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
             </svg>
           </button>
 
-          {/* History dropdown panel */}
+          {/* History dropdown panel — fixed so it escapes overflow:hidden on the chat panel */}
           {sidebarOpen && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setSidebarOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 z-40 w-72 max-h-80 overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-lg chat-scrollbar">
+              <div className="fixed inset-0 z-[998]" onClick={() => setSidebarOpen(false)} />
+              <div className="fixed z-[999] w-72 max-h-80 overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-lg chat-scrollbar"
+                style={{ top: dropdownPos.top, left: dropdownPos.left }}
+              >
                 {isLoadingSessions ? (
                   <div className="flex items-center justify-center py-6">
                     <svg className="animate-spin h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none">
@@ -1107,9 +1120,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
               <p className="text-sm text-gray-500 mb-6">
                 What would you like to update?
               </p>
-
-              {/* Quick action buttons */}
-              <div className="flex flex-col gap-1.5">
+              <div className={isBottom ? "flex flex-wrap justify-center gap-1.5" : "flex flex-col gap-1.5"}>
                 {[
                   { label: "Add Event", icon: <><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>, prompt: "I need to add a new event." },
                   { label: "Update Hours", icon: <><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>, prompt: "I need to update the library hours." },
@@ -1124,12 +1135,15 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                   <button
                     key={action.label}
                     onClick={() => sendMessage(action.prompt)}
-                    className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all text-left"
+                    className={isBottom
+                      ? "flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all"
+                      : "flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all text-left"
+                    }
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
+                    <svg width={isBottom ? 13 : 18} height={isBottom ? 13 : 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
                       {action.icon}
                     </svg>
-                    <span className="text-xs font-medium">{action.label}</span>
+                    <span className={isBottom ? "text-[11px] font-medium whitespace-nowrap" : "text-xs font-medium"}>{action.label}</span>
                   </button>
                 ))}
               </div>

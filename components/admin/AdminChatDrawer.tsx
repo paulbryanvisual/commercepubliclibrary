@@ -171,7 +171,7 @@ export default function AdminChatDrawer({
       <div className={`flex flex-col flex-1 min-h-0 min-w-0 ${isLeft ? "pr-1.5" : "pt-1.5"}`}
         style={isLeft ? { minWidth: leftWidth } : { minHeight: bottomHeight }}
       >
-        <AdminChat userId={userId} userName={userName} currentPage={currentPage} />
+        <AdminChat userId={userId} userName={userName} currentPage={currentPage} position={position} />
       </div>
     </div>
   );
