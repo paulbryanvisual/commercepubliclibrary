@@ -103,7 +103,7 @@ function ImageSearchCard({ input, onUse }: { input: Record<string, unknown>; onU
     <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/30 overflow-hidden shadow-sm">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-blue-100 bg-blue-50/50">
         <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">🔍 Image Search</span>
-        <span className="text-xs text-gray-500 truncate">"{String(input.query)}"</span>
+        <span className="text-xs text-gray-500 truncate">&ldquo;{String(input.query)}&rdquo;</span>
       </div>
       <div className="p-3">
         {loading ? (
@@ -211,19 +211,6 @@ function ToolPreviewCard({
   const [errorMessage, setErrorMessage] = useState("");
   const [draftMeta, setDraftMeta] = useState<{ table: string; id: string } | null>(null);
 
-  /* ── Image tools render immediately without draft flow ── */
-  if (toolUse.name === "search_images") {
-    return <ImageSearchCard input={input as Record<string, unknown>} onUse={(url) => {
-      onSendMessage?.(`Use this image on the page: ${url}`);
-    }} />;
-  }
-  if (toolUse.name === "generate_image") {
-    return <ImageGenerateCard input={input as Record<string, unknown>} onUse={(url) => {
-      const purpose = (input.purpose as string) || "";
-      onSendMessage?.(`The generated image is ready. Please update the page with this image URL: ${url}${purpose ? ` (purpose: ${purpose})` : ""}`);
-    }} />;
-  }
-
   const cardHeader = () => {
     switch (toolUse.name) {
       case "create_event": return "New Event";
@@ -244,8 +231,8 @@ function ToolPreviewCard({
   // Auto-save as draft when the card first appears
   useEffect(() => {
     if (state !== "idle") return;
-    // Don't auto-save analytics or non-content tools
-    if (["get_analytics", "send_newsletter_draft", "upload_image"].includes(toolUse.name)) return;
+    // Don't auto-save image tools or analytics/non-content tools
+    if (["search_images", "generate_image", "get_analytics", "send_newsletter_draft", "upload_image"].includes(toolUse.name)) return;
 
     const saveDraft = async () => {
       setState("saving");
@@ -338,6 +325,19 @@ function ToolPreviewCard({
       default: return null;
     }
   };
+
+  /* ── Image tools render immediately without draft flow (after all hooks) ── */
+  if (toolUse.name === "search_images") {
+    return <ImageSearchCard input={input as Record<string, unknown>} onUse={(url) => {
+      onSendMessage?.(`Use this image on the page: ${url}`);
+    }} />;
+  }
+  if (toolUse.name === "generate_image") {
+    return <ImageGenerateCard input={input as Record<string, unknown>} onUse={(url) => {
+      const purpose = (input.purpose as string) || "";
+      onSendMessage?.(`The generated image is ready. Please update the page with this image URL: ${url}${purpose ? ` (purpose: ${purpose})` : ""}`);
+    }} />;
+  }
 
   return (
     <div className={`mt-3 rounded-xl border overflow-hidden shadow-sm ${
@@ -1201,7 +1201,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
         )}
 
         {/* ─── Input area ─── */}
-        <div className="border-t border-gray-200 bg-white p-3 sm:p-4 pb-safe">
+        <div className="border-t border-gray-200 bg-white px-3 py-2 pb-safe">
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -1274,7 +1274,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
               </div>
             )}
 
-            <div className="flex items-end gap-2 rounded-2xl bg-gray-50 border border-gray-200 px-3 py-2.5 transition-all">
+            <div className="flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-200 px-2.5 py-1.5 transition-all">
               {/* Attach file button */}
               <button
                 type="button"
@@ -1320,7 +1320,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={attachedFiles.length > 0 ? "Add a message about these files..." : "Tell the AI what to update..."}
+                placeholder={attachedFiles.length > 0 ? "Add a message about these files..." : ""}
                 rows={1}
                 className="flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none resize-none leading-relaxed"
                 disabled={isLoading}
