@@ -2,6 +2,36 @@
 
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent, type DragEvent } from "react";
 
+/* ── Page screenshot capture ── */
+async function capturePageScreenshot(): Promise<{ base64: string; mediaType: string; fileName: string } | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    // Dynamically import html2canvas to avoid SSR issues
+    const { default: html2canvas } = await import("html2canvas");
+    // The admin chat panel pushes body via marginLeft — skip that width so we only capture the page
+    const chatWidth = parseInt(document.body.style.marginLeft || "0", 10);
+    const topOffset = 40; // admin toolbar height
+    const pageWidth = window.innerWidth - chatWidth;
+    const pageHeight = Math.min(window.innerHeight - topOffset, 1400);
+    const canvas = await html2canvas(document.documentElement, {
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      scale: 0.45, // Low res — keeps token cost minimal
+      x: chatWidth,
+      y: topOffset,
+      width: pageWidth,
+      height: pageHeight,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+    });
+    const base64 = canvas.toDataURL("image/jpeg", 0.55).split(",")[1];
+    return { base64, mediaType: "image/jpeg", fileName: "page-view.jpg" };
+  } catch {
+    return null;
+  }
+}
+
 /* ── Types ── */
 
 interface ToolUseBlock {
@@ -51,13 +81,126 @@ interface AdminChatProps {
   currentPage?: string;
 }
 
+/* ── Image Search Card ── */
+function ImageSearchCard({ input, onUse }: { input: Record<string, unknown>; onUse: (url: string) => void }) {
+  const [images, setImages] = useState<Array<{ url: string; thumb: string; description: string; credit: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [used, setUsed] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/cms/search-images", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: input.query, count: input.count || 4, orientation: input.orientation || "landscape" }),
+    })
+      .then(r => r.json())
+      .then(d => { setImages(d.images || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/30 overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-blue-100 bg-blue-50/50">
+        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">🔍 Image Search</span>
+        <span className="text-xs text-gray-500 truncate">"{String(input.query)}"</span>
+      </div>
+      <div className="p-3">
+        {loading ? (
+          <div className="flex items-center gap-2 py-4 text-sm text-gray-500">
+            <svg className="animate-spin h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            Searching for images...
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {images.map((img, i) => (
+              <div key={i} className={`relative rounded-lg overflow-hidden border-2 transition-all ${used === img.url ? "border-green-400" : "border-transparent hover:border-blue-300"}`}>
+                <img src={img.thumb} alt={img.description} className="w-full h-24 object-cover" />
+                <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-all flex items-end">
+                  <button
+                    onClick={() => { setUsed(img.url); onUse(img.url); }}
+                    className="w-full py-1.5 text-xs font-semibold text-white bg-blue-600/90 hover:bg-blue-700 transition-colors opacity-0 hover:opacity-100"
+                  >
+                    {used === img.url ? "✓ Selected" : "Use this photo"}
+                  </button>
+                </div>
+                {used === img.url && (
+                  <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✓</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {!loading && images.length === 0 && (
+          <p className="text-xs text-gray-500 py-2">No images found. Try a different search term.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Image Generation Card ── */
+function ImageGenerateCard({ input, onUse }: { input: Record<string, unknown>; onUse: (url: string) => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [used, setUsed] = useState(false);
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    fetch("/api/cms/generate-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.url) { setUrl(d.url); setNote(d.note || ""); }
+        else setError(d.error || "Generation failed");
+        setLoading(false);
+      })
+      .catch(() => { setError("Network error"); setLoading(false); });
+  }, []);
+
+  return (
+    <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50/20 overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-purple-100 bg-purple-50/40">
+        <span className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">✨ AI Image</span>
+        <span className="text-xs text-gray-500 truncate">{String(input.prompt).slice(0, 60)}…</span>
+      </div>
+      <div className="p-3">
+        {loading ? (
+          <div className="flex flex-col items-center gap-3 py-6 text-sm text-gray-500">
+            <svg className="animate-spin h-6 w-6 text-purple" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span>Generating image…</span>
+          </div>
+        ) : error ? (
+          <p className="text-xs text-red-600 py-2">⚠ {error}</p>
+        ) : url ? (
+          <>
+            <img src={url} alt="Generated" className="w-full rounded-lg object-cover max-h-48 mb-2" />
+            {note && <p className="text-[10px] text-amber-600 mb-2">{note}</p>}
+            <button
+              onClick={() => { setUsed(true); onUse(url); }}
+              className={`w-full rounded-lg py-2 text-xs font-semibold transition-colors ${used ? "bg-green-100 text-green-700" : "bg-purple text-white hover:bg-purple/90"}`}
+            >
+              {used ? "✓ Using this image" : "Use this image"}
+            </button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /* ── Tool preview card renderer ── */
 function ToolPreviewCard({
   toolUse,
   onEdit,
+  onSendMessage,
 }: {
   toolUse: ToolUseBlock;
   onEdit?: (instruction: string) => void;
+  onSendMessage?: (msg: string) => void;
 }) {
   const input = toolUse.input;
   // Draft flow: idle → saving (auto-save as draft) → draft → publishing → published
@@ -66,6 +209,19 @@ function ToolPreviewCard({
   >("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [draftMeta, setDraftMeta] = useState<{ table: string; id: string } | null>(null);
+
+  /* ── Image tools render immediately without draft flow ── */
+  if (toolUse.name === "search_images") {
+    return <ImageSearchCard input={input as Record<string, unknown>} onUse={(url) => {
+      onSendMessage?.(`Use this image on the page: ${url}`);
+    }} />;
+  }
+  if (toolUse.name === "generate_image") {
+    return <ImageGenerateCard input={input as Record<string, unknown>} onUse={(url) => {
+      const purpose = (input.purpose as string) || "";
+      onSendMessage?.(`The generated image is ready. Please update the page with this image URL: ${url}${purpose ? ` (purpose: ${purpose})` : ""}`);
+    }} />;
+  }
 
   const cardHeader = () => {
     switch (toolUse.name) {
@@ -317,6 +473,8 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [previewPage, setPreviewPage] = useState(currentPage || "/");
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [autoScreenshot, setAutoScreenshot] = useState(true); // auto-capture with every message
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -481,14 +639,28 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
         timestamp: new Date(),
       };
 
-      // Collect image data to send to API
-      const images = attachedFiles
+      // Collect image data to send to API (user-attached files)
+      const userImages = attachedFiles
         .filter((f) => f.base64 && f.mediaType)
         .map((f) => ({
           base64: f.base64!,
           mediaType: f.mediaType!,
           fileName: f.file.name,
         }));
+
+      // Auto-capture page screenshot so the AI can see the current page visually
+      let pageScreenshot: { base64: string; mediaType: string; fileName: string } | null = null;
+      if (autoScreenshot) {
+        setIsCapturing(true);
+        pageScreenshot = await capturePageScreenshot();
+        setIsCapturing(false);
+      }
+
+      // Page screenshot goes first so Claude sees context before user files
+      const images = [
+        ...(pageScreenshot ? [pageScreenshot] : []),
+        ...userImages,
+      ];
 
       // Non-image file names for context
       const nonImageFiles = attachedFiles
@@ -524,6 +696,11 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
         const uploadedImages = attachedFiles.filter((f) => f.uploadedUrl);
         if (uploadedImages.length > 0) {
           messageText += `\n\n[Image URLs already uploaded to storage: ${uploadedImages.map((f) => `${f.file.name} → ${f.uploadedUrl}`).join(", ")}. Use these exact URLs when updating page content — do not call upload_image.]`;
+        }
+
+        // Let Claude know the first attached image is the live page view
+        if (pageScreenshot) {
+          messageText = `[The first attached image is a real-time screenshot of the page the staff member is currently viewing on their screen. Use it to understand the current visual appearance, layout, and design before making changes.]\n\n${messageText}`;
         }
 
         const res = await fetch("/api/ai/admin", {
@@ -939,6 +1116,9 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                   { label: "Post Announcement", icon: <><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></>, prompt: "I want to post a new announcement." },
                   { label: "Staff Picks", icon: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>, prompt: "I want to add a new staff pick." },
                   { label: "Edit Page", icon: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>, prompt: "I need to edit page content." },
+                  { label: "Find Images", icon: <><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></>, prompt: "Search for photos I can use on the website." },
+                  { label: "Generate Image", icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></>, prompt: "Generate a custom AI image for the website." },
+                  { label: "Redesign Page", icon: <><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></>, prompt: "Help me redesign this page — new text, new images, fresh look." },
                   { label: "Newsletter", icon: <><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></>, prompt: "I want to draft a newsletter." },
                 ].map((action) => (
                   <button
@@ -993,6 +1173,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                           setInput(instruction);
                           textareaRef.current?.focus();
                         }}
+                        onSendMessage={(msg) => sendMessage(msg)}
                       />
                     ))}
                   </div>
@@ -1094,6 +1275,32 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                 </svg>
               </button>
 
+              {/* Page vision toggle — eye icon */}
+              <button
+                type="button"
+                onClick={() => setAutoScreenshot((v) => !v)}
+                disabled={isLoading}
+                className={`shrink-0 rounded-lg p-1.5 transition-colors disabled:opacity-40 ${autoScreenshot ? "text-purple bg-purple/10 hover:bg-purple/20" : "text-gray-400 hover:text-purple hover:bg-purple/10"}`}
+                aria-label={autoScreenshot ? "Page vision ON — AI sees your screen" : "Page vision OFF — click to enable"}
+                title={autoScreenshot ? "Page vision ON — AI sees your screen with each message" : "Page vision OFF — click to enable"}
+              >
+                {isCapturing ? (
+                  <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                ) : autoScreenshot ? (
+                  /* Eye open */
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                ) : (
+                  /* Eye closed */
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                )}
+              </button>
+
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -1116,7 +1323,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
               </button>
             </div>
             <p className="text-center text-[10px] text-gray-400 mt-2">
-              Enter to send &middot; Shift+Enter for new line &middot; Drag &amp; drop or 📎 to attach files
+              Enter to send &middot; Shift+Enter for new line &middot; {autoScreenshot ? "👁 AI sees your page" : "👁 Page vision off"} &middot; 📎 to attach files
             </p>
           </form>
         </div>

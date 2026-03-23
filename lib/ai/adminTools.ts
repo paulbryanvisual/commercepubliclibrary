@@ -347,6 +347,82 @@ export const adminTools: Anthropic.Tool[] = [
     },
   },
 
+  /* ───── Image Search & Generation ───── */
+  {
+    name: "search_images",
+    description:
+      "Search for relevant stock photos to use on the website. Returns a list of image URLs with descriptions. Use these URLs with update_page_content to set images on any page or event.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "A descriptive search query, e.g. 'children reading books library', 'community event outdoors', 'senior adults library'",
+        },
+        count: {
+          type: "number",
+          description: "Number of images to return (1-6). Defaults to 4.",
+        },
+        orientation: {
+          type: "string",
+          enum: ["landscape", "portrait", "square"],
+          description: "Preferred image orientation. Defaults to landscape.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "generate_image",
+    description:
+      "Generate a custom AI image for use on the website — great for event banners, page headers, or promotional graphics. The image is automatically uploaded to storage and the URL is returned. Use the returned URL with update_page_content to place it on the page.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "Detailed description of the image to generate. Be specific about style, content, mood. Example: 'Warm, welcoming library interior with natural light, books on shelves, a cozy reading nook, photorealistic style'",
+        },
+        style: {
+          type: "string",
+          enum: ["photorealistic", "illustration", "watercolor", "flat-design"],
+          description: "Visual style. Defaults to photorealistic.",
+        },
+        aspect_ratio: {
+          type: "string",
+          enum: ["16:9", "4:3", "1:1", "3:2"],
+          description: "Aspect ratio of the generated image. Defaults to 16:9.",
+        },
+        purpose: {
+          type: "string",
+          description:
+            "Where this image will be used, e.g. 'event banner for story time', 'hero image for kids page'. Helps optimize the prompt.",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
+
+  /* ───── Page Reading ───── */
+  {
+    name: "read_page",
+    description:
+      "Read the current live content of any page on the website — hero text, images, descriptions, announcements, upcoming events, hours, etc. Use this whenever you need to see what's currently on a page before making changes, or when the user asks what's there.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        page: {
+          type: "string",
+          description:
+            "The page slug to read, e.g. 'home', 'kids', 'about', 'services', 'events'. Use 'home' for the homepage.",
+        },
+      },
+      required: ["page"],
+    },
+  },
+
   /* ───── Analytics ───── */
   {
     name: "get_analytics",
