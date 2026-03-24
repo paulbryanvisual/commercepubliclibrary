@@ -149,14 +149,29 @@ export default async function HomePage({
             {/* Left: Text */}
             <div className="relative z-10">
               <h1 className="text-4xl md:text-[52px] font-semibold text-white leading-[1.1] mb-5 tracking-tight">
-                {heroTitle || "Your library."}
+                <span
+                  data-cms-editable="true"
+                  data-cms-page="home"
+                  data-cms-section="hero_title"
+                  suppressHydrationWarning
+                >{heroTitle || "Your library."}</span>
                 <br />
                 <span
                   className="text-primary-200"
                   style={heroAccentColor ? { color: heroAccentColor } : undefined}
+                  data-cms-editable="true"
+                  data-cms-page="home"
+                  data-cms-section="hero_subtitle"
+                  suppressHydrationWarning
                 >{heroSubtitle || "Your community."}</span>
               </h1>
-              <p className="text-lg md:text-xl text-primary-100/90 mb-8 max-w-md leading-relaxed">
+              <p
+                className="text-lg md:text-xl text-primary-100/90 mb-8 max-w-md leading-relaxed"
+                data-cms-editable="true"
+                data-cms-page="home"
+                data-cms-section="hero_description"
+                suppressHydrationWarning
+              >
                 {heroDescription || "Free books, ebooks, events, passport services, and more — for everyone in Hunt County."}
               </p>
 

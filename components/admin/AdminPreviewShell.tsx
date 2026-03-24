@@ -7,6 +7,7 @@ import dynamic from "next/dynamic";
 // Lazy-load the heavy components
 const AdminChatDrawer = dynamic(() => import("./AdminChatDrawer"), { ssr: false });
 const AIChatButton = dynamic(() => import("@/components/ai/AIChatButton"), { ssr: false });
+const InlineEditorOverlay = dynamic(() => import("./InlineEditorOverlay"), { ssr: false });
 
 interface AdminUser {
   id: string;
@@ -91,6 +92,9 @@ export default function AdminPreviewShell() {
   // Admin in preview mode — show the drawer + toolbar
   return (
     <>
+      {/* Inline text editor — click any marked element to edit in place */}
+      <InlineEditorOverlay />
+
       {/* Preview mode toolbar */}
       <PreviewToolbar
         user={adminUser}
