@@ -1274,7 +1274,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
   return (
     <div className="flex flex-col flex-1 bg-gray-50 min-h-0">
       {/* ─── Chat header with history dropdown ─── */}
-      <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2 flex items-center gap-2">
+      <div className="shrink-0 border-b border-gray-200 bg-white px-2 py-1.5 flex flex-wrap items-center gap-1.5 min-w-0">
         {/* New conversation button */}
         <button
           onClick={() => {
@@ -1282,9 +1282,9 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             setInput("");
             setSidebarOpen(false);
           }}
-          className="flex items-center gap-1.5 rounded-lg bg-purple px-3 py-1.5 text-xs font-semibold text-white hover:bg-purple-600 transition-colors"
+          className="shrink-0 flex items-center gap-1 rounded-lg bg-purple px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-purple-600 transition-colors"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 5v14M5 12h14" />
           </svg>
           New
@@ -1302,13 +1302,13 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             setSelectMode((v) => !v);
           }}
           title="Select an area on the page to edit"
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+          className={`shrink-0 flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
             selectMode
               ? "border-purple bg-purple text-white"
               : "border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300"
           }`}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 3h5M3 3v5M21 3h-5M21 3v5M3 21h5M3 21v-5M21 21h-5M21 21v-5"/>
           </svg>
           Select
@@ -1325,7 +1325,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
               }
               setSidebarOpen(!sidebarOpen);
             }}
-            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`shrink-0 flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
               sidebarOpen
                 ? "border-purple bg-purple-50 text-purple"
                 : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700"
@@ -1396,42 +1396,39 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
           )}
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+        {/* Spacer pushes model picker to the right */}
+        <div className="flex-1 min-w-0" />
 
-        {/* Powered by badge */}
         {/* Model picker */}
-        <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden text-[11px] font-semibold">
+        <div className="shrink-0 flex items-center rounded-lg border border-gray-200 overflow-hidden text-[11px] font-semibold">
           <button
             onClick={() => setSelectedModel("claude")}
             title="Claude Sonnet (Anthropic)"
-            className={`flex items-center gap-1 px-2.5 py-1.5 transition-colors ${
+            className={`flex items-center gap-1 px-2 py-1.5 transition-colors ${
               selectedModel === "claude"
                 ? "bg-[#d4a574] text-white"
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
             }`}
           >
-            {/* Anthropic-style triangle */}
-            <svg width="11" height="10" viewBox="0 0 32 28" fill="currentColor">
+            <svg width="10" height="9" viewBox="0 0 32 28" fill="currentColor">
               <path d="M16 0L32 28H0L16 0Z" />
             </svg>
-            Claude
+            <span className="hidden sm:inline">Claude</span>
           </button>
-          <div className="w-px h-5 bg-gray-200" />
+          <div className="w-px h-4 bg-gray-200" />
           <button
             onClick={() => setSelectedModel("gemini")}
             title="Gemini 2.0 Flash (Google)"
-            className={`flex items-center gap-1 px-2.5 py-1.5 transition-colors ${
+            className={`flex items-center gap-1 px-2 py-1.5 transition-colors ${
               selectedModel === "gemini"
                 ? "bg-[#4285F4] text-white"
                 : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
             }`}
           >
-            {/* Google G-style star */}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"/>
             </svg>
-            Gemini
+            <span className="hidden sm:inline">Gemini</span>
           </button>
         </div>
       </div>
@@ -1513,7 +1510,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
                   }`}
                 >
                   <div
-                    className={`max-w-[92%] ${
+                    className={`min-w-0 max-w-[92%] ${
                       msg.role === "user"
                         ? "rounded-2xl rounded-br-md bg-primary text-white px-4 py-3"
                         : "rounded-2xl rounded-bl-md bg-purple-50 px-4 py-3 w-full"
@@ -1536,7 +1533,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
                     {/* Text content */}
                     {msg.content && (
                       <div
-                        className={`text-sm leading-relaxed whitespace-pre-wrap ${
+                        className={`text-sm leading-relaxed whitespace-pre-wrap break-words overflow-wrap-anywhere min-w-0 ${
                           msg.role === "user" ? "text-white" : "text-gray-700"
                         }`}
                       >
