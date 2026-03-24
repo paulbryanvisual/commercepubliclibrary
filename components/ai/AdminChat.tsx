@@ -248,6 +248,12 @@ function ToolPreviewCard({
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || `Error ${res.status}`);
 
+        // page_content publishes immediately — skip draft flow
+        if (toolUse.name === "update_page_content") {
+          setState("published");
+          window.dispatchEvent(new Event("cms-published"));
+          return;
+        }
         // Store draft metadata for later publish
         if (data.draft?.table && data.draft?.id) {
           setDraftMeta({ table: data.draft.table, id: data.draft.id });
@@ -317,7 +323,7 @@ function ToolPreviewCard({
   const statusBadge = () => {
     switch (state) {
       case "saving": return <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Saving draft...</span>;
-      case "draft": return <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Draft — Preview it →</span>;
+      case "draft": return <button onClick={() => { window.dispatchEvent(new Event("cms-published")); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer">Draft — refresh preview ↻</button>;
       case "publishing": return <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Publishing...</span>;
       case "published": return <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">✓ Live</span>;
       case "discarded": return <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500">Discarded</span>;
