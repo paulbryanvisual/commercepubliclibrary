@@ -6,8 +6,10 @@ import {
   updateEvent,
   deleteEvent,
   addAnnouncement,
+  deleteAnnouncement,
   addStaffPick,
   addClosure,
+  deleteClosure,
   updateHours,
   updatePageContent,
 } from "@/lib/cms/dataStore";
@@ -119,6 +121,13 @@ export async function POST(request: NextRequest) {
         );
         break;
 
+      case "delete_announcement":
+        action = "Deleted announcement";
+        result = await deleteAnnouncement(
+          toolInput as Parameters<typeof deleteAnnouncement>[0]
+        );
+        break;
+
       case "update_hours":
         action = "Updated hours (draft)";
         result = await updateHours(
@@ -130,6 +139,13 @@ export async function POST(request: NextRequest) {
         action = "Added closure (draft)";
         result = await addClosure(
           toolInput as Parameters<typeof addClosure>[0]
+        );
+        break;
+
+      case "delete_closure":
+        action = "Deleted closure";
+        result = await deleteClosure(
+          toolInput as Parameters<typeof deleteClosure>[0]
         );
         break;
 

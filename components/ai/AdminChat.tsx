@@ -528,12 +528,19 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
       if (!conv.dbId || conv.messages.length > 0) return;
 
       try {
-        // Fetch the full session with messages
-        const res = await fetch(`/api/ai/admin/chat-sessions`);
+        const res = await fetch(`/api/ai/admin/chat-sessions?id=${conv.dbId}`);
         if (!res.ok) return;
-        // We need a way to get a single session — for now, re-fetch and find
-        // Actually, let's just fetch all and find ours. This is fine for a small admin app.
-        // In a real app, we'd have a GET /api/ai/admin/chat-sessions/:id endpoint.
+        const data = await res.json();
+        const raw = data.session?.messages;
+        const msgs: ChatMessage[] = Array.isArray(raw)
+          ? raw
+          : typeof raw === "string"
+          ? JSON.parse(raw)
+          : [];
+        if (msgs.length === 0) return;
+        setConversations((prev) =>
+          prev.map((c) => (c.id === conv.id ? { ...c, messages: msgs } : c))
+        );
       } catch {
         // Fail silently
       }

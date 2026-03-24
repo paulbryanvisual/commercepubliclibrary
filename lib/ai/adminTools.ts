@@ -148,6 +148,19 @@ export const adminTools: Anthropic.Tool[] = [
     },
   },
 
+  {
+    name: "delete_announcement",
+    description: "Delete an announcement permanently by its ID. Always confirm with the user first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        announcement_id: { type: "string", description: "The UUID of the announcement to delete" },
+        confirm: { type: "boolean", description: "Must be true to proceed" },
+      },
+      required: ["announcement_id", "confirm"],
+    },
+  },
+
   /* ───── Hours & Closures ───── */
   {
     name: "update_hours",
@@ -197,6 +210,18 @@ export const adminTools: Anthropic.Tool[] = [
         },
       },
       required: ["hours"],
+    },
+  },
+  {
+    name: "delete_closure",
+    description: "Delete a closure permanently by its ID. Always confirm with the user first.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        closure_id: { type: "string", description: "The UUID of the closure to delete" },
+        confirm: { type: "boolean", description: "Must be true to proceed" },
+      },
+      required: ["closure_id", "confirm"],
     },
   },
   {

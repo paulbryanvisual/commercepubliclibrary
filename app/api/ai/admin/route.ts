@@ -146,21 +146,27 @@ export async function POST(request: NextRequest) {
     const upcomingEvents = cmsData.events
       .filter(e => new Date(e.date) >= now && !e.cancelled)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(0, 5)
-      .map(e => `  - ${e.title} (${e.date} ${e.startTime}, ${e.audience})`)
+      .slice(0, 8)
+      .map(e => `  - [id:${e.id}] ${e.title} (${e.date} ${e.startTime}, ${e.audience})`)
       .join("\n");
 
     const announcements = cmsData.announcements
-      .filter(a => a.status === "published")
-      .slice(0, 3)
-      .map(a => `  - [${a.type}] ${a.title}: ${a.body.slice(0, 80)}…`)
+      .slice(0, 5)
+      .map(a => `  - [id:${a.id}] [${a.type}] ${a.title}: ${a.body.slice(0, 80)}…`)
+      .join("\n");
+
+    const closures = cmsData.closures
+      .slice(0, 5)
+      .map(c => `  - [id:${c.id}] ${c.title} (${c.startDate})`)
       .join("\n");
 
     livePageContext = `\n\n━━━ LIVE PAGE CONTENT (what the staff member sees on the right) ━━━
 Page: ${pageSlug}
 ${sections ? `\nPage sections currently live:\n${sections}` : "\nNo custom page content saved yet."}
-${upcomingEvents ? `\nUpcoming events on site:\n${upcomingEvents}` : ""}
-${announcements ? `\nActive announcements:\n${announcements}` : ""}
+${upcomingEvents ? `\nUpcoming events (use these real IDs for update/delete):\n${upcomingEvents}` : ""}
+${announcements ? `\nAnnouncements (use these real IDs for delete_announcement):\n${announcements}` : ""}
+${closures ? `\nClosures (use these real IDs for delete_closure):\n${closures}` : ""}
+IMPORTANT: Always use the [id:...] values above — never invent IDs.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
   } catch {
     // Non-fatal — proceed without page context

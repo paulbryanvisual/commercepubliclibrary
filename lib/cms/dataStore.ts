@@ -274,7 +274,7 @@ export async function addEvent(input: {
   const slug = input.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-|-$/g, "") + "-" + Date.now();
 
   const { data, error } = await supabase
     .from("events")
@@ -370,6 +370,16 @@ export async function addAnnouncement(input: {
   return mapAnnouncement(data);
 }
 
+export async function deleteAnnouncement(input: {
+  announcement_id: string;
+  confirm: boolean;
+}): Promise<{ deleted: boolean; id: string }> {
+  if (!input.confirm) throw new Error("Deletion not confirmed");
+  const { error } = await supabase.from("announcements").delete().eq("id", input.announcement_id);
+  if (error) throw new Error(error.message);
+  return { deleted: true, id: input.announcement_id };
+}
+
 /* ── Staff Picks ── */
 
 export async function addStaffPick(input: {
@@ -421,6 +431,16 @@ export async function addClosure(input: {
 
   if (error) throw new Error(error.message);
   return mapClosure(data);
+}
+
+export async function deleteClosure(input: {
+  closure_id: string;
+  confirm: boolean;
+}): Promise<{ deleted: boolean; id: string }> {
+  if (!input.confirm) throw new Error("Deletion not confirmed");
+  const { error } = await supabase.from("closures").delete().eq("id", input.closure_id);
+  if (error) throw new Error(error.message);
+  return { deleted: true, id: input.closure_id };
 }
 
 /* ── Hours overrides ── */
