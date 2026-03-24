@@ -12,7 +12,7 @@ import Logo from "@/components/ui/Logo";
  * - #a3d9c8 on #114d3e = contrast ratio ~5.2:1 (AA)
  */
 
-export default function Header() {
+export default function Header({ bgColor }: { bgColor?: string | null }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
@@ -41,7 +41,7 @@ export default function Header() {
       className={`sticky top-0 z-50 w-full border-b border-[#0d3e31] backdrop-blur-sm transition-all duration-200 ${
         scrolled ? "py-1.5 shadow-md" : "py-2.5"
       }`}
-      style={{ backgroundColor: "#114d3e" }}
+      style={{ backgroundColor: bgColor || "#114d3e" }}
       role="banner"
     >
       <div className="mx-auto flex max-w-site items-center justify-between px-4 md:px-8">
@@ -175,7 +175,7 @@ export default function Header() {
         <div
           id="mobile-menu"
           className="lg:hidden border-t border-white/10 animate-slide-up"
-          style={{ backgroundColor: "#114d3e" }}
+          style={{ backgroundColor: bgColor || "#114d3e" }}
           role="navigation"
           aria-label="Mobile navigation"
         >
