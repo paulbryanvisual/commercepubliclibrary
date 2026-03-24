@@ -248,8 +248,8 @@ function ToolPreviewCard({
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || `Error ${res.status}`);
 
-        // page_content publishes immediately — skip draft flow
-        if (toolUse.name === "update_page_content") {
+        // For new page sections (no prior published content), server returns status "published" — skip draft
+        if (toolUse.name === "update_page_content" && data.result?.status === "published") {
           setState("published");
           window.dispatchEvent(new Event("cms-published"));
           return;
