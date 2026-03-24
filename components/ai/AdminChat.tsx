@@ -747,6 +747,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
   const [isCapturing, setIsCapturing] = useState(false);
   const [autoScreenshot, setAutoScreenshot] = useState(true); // auto-capture with every message
   const [selectMode, setSelectMode] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<"claude" | "gemini">("claude");
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const historyBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -1008,6 +1009,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             conversationHistory: history,
             images,
             currentPage: previewPage,
+            model: selectedModel,
           }),
         });
 
@@ -1157,7 +1159,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
         setIsLoading(false);
       }
     },
-    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles, previewPage, autoScreenshot]
+    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles, previewPage, autoScreenshot, selectedModel]
   );
 
   /* Submit handler */
@@ -1398,7 +1400,40 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
         <div className="flex-1" />
 
         {/* Powered by badge */}
-        <span className="text-[10px] text-gray-400">Powered by Claude AI</span>
+        {/* Model picker */}
+        <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden text-[11px] font-semibold">
+          <button
+            onClick={() => setSelectedModel("claude")}
+            title="Claude Sonnet (Anthropic)"
+            className={`flex items-center gap-1 px-2.5 py-1.5 transition-colors ${
+              selectedModel === "claude"
+                ? "bg-[#d4a574] text-white"
+                : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {/* Anthropic-style triangle */}
+            <svg width="11" height="10" viewBox="0 0 32 28" fill="currentColor">
+              <path d="M16 0L32 28H0L16 0Z" />
+            </svg>
+            Claude
+          </button>
+          <div className="w-px h-5 bg-gray-200" />
+          <button
+            onClick={() => setSelectedModel("gemini")}
+            title="Gemini 2.0 Flash (Google)"
+            className={`flex items-center gap-1 px-2.5 py-1.5 transition-colors ${
+              selectedModel === "gemini"
+                ? "bg-[#4285F4] text-white"
+                : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            {/* Google G-style star */}
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"/>
+            </svg>
+            Gemini
+          </button>
+        </div>
       </div>
 
       {/* ─── Chat area ─── */}

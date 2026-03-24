@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { adminTools } from "@/lib/ai/adminTools";
 import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth/adminAuth";
 
@@ -85,53 +86,42 @@ interface RequestBody {
   conversationHistory?: ChatMessage[];
   images?: ImageData[];
   currentPage?: string;
+  model?: "claude" | "gemini";
 }
 
-/* ── Route handler ── */
-export async function POST(request: NextRequest) {
-  // Auth check — now returns session payload with user info
-  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const session = await verifySession(sessionToken);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+/* ── Convert Anthropic tool schema → Gemini FunctionDeclaration ── */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function anthropicToolsToGemini(tools: Anthropic.Tool[]): any[] {
+  return tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: convertSchema(t.input_schema),
+  }));
+}
 
-  // Check for API key
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      {
-        error: "missing_api_key",
-        message:
-          "The ANTHROPIC_API_KEY environment variable is not configured. Please add it to your .env.local file to enable the AI admin assistant.",
-      },
-      { status: 503 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function convertSchema(schema: any): any {
+  if (!schema || typeof schema !== "object") return schema;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const out: any = {};
+
+  if (schema.type) out.type = String(schema.type).toUpperCase();
+  if (schema.description) out.description = schema.description;
+  if (schema.enum) out.enum = schema.enum;
+  if (schema.required) out.required = schema.required;
+
+  if (schema.properties) {
+    out.properties = Object.fromEntries(
+      Object.entries(schema.properties).map(([k, v]) => [k, convertSchema(v)])
     );
   }
+  if (schema.items) out.items = convertSchema(schema.items);
 
-  let body: RequestBody;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    );
-  }
+  return out;
+}
 
-  const { message, conversationHistory = [], images = [], currentPage } = body;
-
-  if ((!message || typeof message !== "string") && images.length === 0) {
-    return NextResponse.json(
-      { error: "message or images required" },
-      { status: 400 }
-    );
-  }
-
-  const client = new Anthropic({ apiKey });
-
-  // Fetch current page content so the AI can "see" what's on the page
-  let livePageContext = "";
+/* ── Fetch live CMS context ── */
+async function getLivePageContext(currentPage?: string): Promise<string> {
   try {
     const { getAllData } = await import("@/lib/cms/dataStore");
     const cmsData = await getAllData();
@@ -160,7 +150,7 @@ export async function POST(request: NextRequest) {
       .map(c => `  - [id:${c.id}] ${c.title} (${c.startDate})`)
       .join("\n");
 
-    livePageContext = `\n\n━━━ LIVE PAGE CONTENT (what the staff member sees on the right) ━━━
+    return `\n\n━━━ LIVE PAGE CONTENT (what the staff member sees on the right) ━━━
 Page: ${pageSlug}
 ${sections ? `\nPage sections currently live:\n${sections}` : "\nNo custom page content saved yet."}
 ${upcomingEvents ? `\nUpcoming events (use these real IDs for update/delete):\n${upcomingEvents}` : ""}
@@ -169,82 +159,180 @@ ${closures ? `\nClosures (use these real IDs for delete_closure):\n${closures}` 
 IMPORTANT: Always use the [id:...] values above — never invent IDs.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
   } catch {
-    // Non-fatal — proceed without page context
+    return "";
+  }
+}
+
+/* ── Route handler ── */
+export async function POST(request: NextRequest) {
+  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await verifySession(sessionToken);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Build messages array
-  const historyMessages: Anthropic.MessageParam[] = conversationHistory.map((m) => ({
-    role: m.role as "user" | "assistant",
-    content: m.content,
-  }));
+  let body: RequestBody;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
-  // Build the current user message content (text + images)
-  const userContent: Anthropic.ContentBlockParam[] = [];
+  const { message, conversationHistory = [], images = [], currentPage, model = "claude" } = body;
 
-  // Add images first so Claude sees them before the text
-  for (const img of images) {
-    userContent.push({
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-        data: img.base64,
+  if ((!message || typeof message !== "string") && images.length === 0) {
+    return NextResponse.json({ error: "message or images required" }, { status: 400 });
+  }
+
+  const systemPrompt = buildSystemPrompt(session.displayName, currentPage);
+  const livePageContext = await getLivePageContext(currentPage);
+  const fullSystem = systemPrompt + livePageContext;
+  const encoder = new TextEncoder();
+
+  /* ─── CLAUDE ─── */
+  if (model === "claude") {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: "missing_api_key", message: "ANTHROPIC_API_KEY not configured." }, { status: 503 });
+    }
+
+    const client = new Anthropic({ apiKey });
+
+    const historyMessages: Anthropic.MessageParam[] = conversationHistory.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+
+    const userContent: Anthropic.ContentBlockParam[] = [];
+    for (const img of images) {
+      userContent.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+          data: img.base64,
+        },
+      });
+    }
+    if (message) userContent.push({ type: "text", text: message });
+
+    const messages: Anthropic.MessageParam[] = [
+      ...historyMessages,
+      { role: "user", content: userContent.length === 1 && userContent[0].type === "text" ? message : userContent },
+    ];
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const response = await client.messages.create({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 4096,
+            system: fullSystem,
+            tools: adminTools,
+            messages,
+            stream: true,
+          });
+          for await (const event of response) {
+            controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+          }
+          controller.close();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          controller.enqueue(encoder.encode(JSON.stringify({ type: "error", error: msg }) + "\n"));
+          controller.close();
+        }
       },
     });
-  }
 
-  // Add the text message
-  if (message) {
-    userContent.push({
-      type: "text",
-      text: message,
+    return new Response(stream, {
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" },
     });
   }
 
-  const messages: Anthropic.MessageParam[] = [
-    ...historyMessages,
-    { role: "user", content: userContent.length === 1 && userContent[0].type === "text" ? message : userContent },
-  ];
+  /* ─── GEMINI ─── */
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    return NextResponse.json({ error: "missing_api_key", message: "GEMINI_API_KEY not configured." }, { status: 503 });
+  }
 
-  // Use streaming with personalized system prompt
-  const encoder = new TextEncoder();
+  const genai = new GoogleGenAI({ apiKey: geminiKey });
+  const geminiTools = anthropicToolsToGemini(adminTools);
+
+  // Build Gemini conversation history
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const geminiHistory: any[] = conversationHistory.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  // Build current user message parts
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const userParts: any[] = [];
+  for (const img of images) {
+    userParts.push({ inlineData: { mimeType: img.mediaType, data: img.base64 } });
+  }
+  if (message) userParts.push({ text: message });
+
   const stream = new ReadableStream({
     async start(controller) {
+      // Helper to emit an event in the same format the client already parses
+      const emit = (obj: object) => controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+
       try {
-        const response = await client.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4096,
-          system: buildSystemPrompt(session.displayName, currentPage) + livePageContext,
-          tools: adminTools,
-          messages,
-          stream: true,
+        const chat = genai.chats.create({
+          model: "gemini-2.0-flash",
+          config: {
+            systemInstruction: fullSystem,
+            tools: [{ functionDeclarations: geminiTools }],
+            maxOutputTokens: 4096,
+          },
+          history: geminiHistory,
         });
 
-        for await (const event of response) {
-          // Stream each event as a server-sent-event-style JSON line
-          const data = JSON.stringify(event) + "\n";
-          controller.enqueue(encoder.encode(data));
+        const response = await chat.sendMessageStream({ message: userParts });
+
+        let toolIndex = 0;
+
+        for await (const chunk of response) {
+          const candidate = chunk.candidates?.[0];
+          if (!candidate?.content?.parts) continue;
+
+          for (const part of candidate.content.parts) {
+            if (part.text) {
+              // Emit as Claude-compatible text_delta events
+              emit({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+              emit({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: part.text } });
+              emit({ type: "content_block_stop", index: 0 });
+            }
+
+            if (part.functionCall) {
+              const toolId = `gemini_tool_${toolIndex++}`;
+              emit({
+                type: "content_block_start",
+                index: toolIndex,
+                content_block: { type: "tool_use", id: toolId, name: part.functionCall.name, input: {} },
+              });
+              emit({
+                type: "content_block_delta",
+                index: toolIndex,
+                delta: { type: "input_json_delta", partial_json: JSON.stringify(part.functionCall.args || {}) },
+              });
+              emit({ type: "content_block_stop", index: toolIndex });
+            }
+          }
         }
 
+        emit({ type: "message_stop" });
         controller.close();
       } catch (err: unknown) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Unknown error";
-        const errorData = JSON.stringify({
-          type: "error",
-          error: errorMessage,
-        });
-        controller.enqueue(encoder.encode(errorData + "\n"));
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        emit({ type: "error", error: msg });
         controller.close();
       }
     },
   });
 
   return new Response(stream, {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-cache",
-      "Transfer-Encoding": "chunked",
-    },
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" },
   });
 }
