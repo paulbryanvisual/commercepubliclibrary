@@ -3,34 +3,133 @@
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent, type DragEvent } from "react";
 import { createPortal } from "react-dom";
 
-/* ── Page screenshot capture ── */
-async function capturePageScreenshot(): Promise<{ base64: string; mediaType: string; fileName: string } | null> {
-  if (typeof window === "undefined") return null;
+/* ── True screenshot via getDisplayMedia ── */
+
+// Module-level stream cache so we only ask for permission once per session
+let _captureStream: MediaStream | null = null;
+
+async function getTabStream(): Promise<MediaStream | null> {
+  // Reuse live stream if we already have one
+  if (_captureStream && _captureStream.active) return _captureStream;
+  _captureStream = null;
+
   try {
-    // Dynamically import html2canvas to avoid SSR issues
-    const { default: html2canvas } = await import("html2canvas");
-    // The admin chat panel pushes body via marginLeft — skip that width so we only capture the page
-    const chatWidth = parseInt(document.body.style.marginLeft || "0", 10);
-    const topOffset = 40; // admin toolbar height
-    const pageWidth = window.innerWidth - chatWidth;
-    const pageHeight = Math.min(window.innerHeight - topOffset, 1400);
-    const canvas = await html2canvas(document.documentElement, {
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      scale: 0.45, // Low res — keeps token cost minimal
-      x: chatWidth,
-      y: topOffset,
-      width: pageWidth,
-      height: pageHeight,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight,
-    });
-    const base64 = canvas.toDataURL("image/jpeg", 0.55).split(",")[1];
-    return { base64, mediaType: "image/jpeg", fileName: "page-view.jpg" };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const constraints: any = {
+      video: { displaySurface: "browser", frameRate: 5 },
+      audio: false,
+      preferCurrentTab: true,   // Chrome 107+ — auto-selects current tab
+      selfBrowserSurface: "include",
+      systemAudio: "exclude",
+    };
+    const stream = await navigator.mediaDevices.getDisplayMedia(constraints);
+    // Auto-clear when the user stops sharing
+    stream.getVideoTracks()[0].addEventListener("ended", () => { _captureStream = null; });
+    _captureStream = stream;
+    return stream;
   } catch {
-    return null;
+    return null; // User cancelled or browser doesn't support it
   }
+}
+
+/** Capture a frame from the tab stream, optionally cropped to a viewport rect */
+async function captureFrame(
+  crop?: { x: number; y: number; w: number; h: number }
+): Promise<{ base64: string; mediaType: string; fileName: string; dataUrl: string } | null> {
+  if (typeof window === "undefined") return null;
+
+  const stream = await getTabStream();
+  if (!stream) return null;
+
+  const track = stream.getVideoTracks()[0];
+
+  // Prefer ImageCapture API (cleaner, no <video> flicker) when available
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (typeof (window as any).ImageCapture !== "undefined") {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ic = new (window as any).ImageCapture(track);
+      const bitmap: ImageBitmap = await ic.grabFrame();
+      const dataUrl = cropBitmap(bitmap, crop, stream);
+      bitmap.close();
+      return toResult(dataUrl, "selection.jpg");
+    } catch { /* fall through to video approach */ }
+  }
+
+  // Fallback: render to a hidden <video> and capture a frame
+  const video = document.createElement("video");
+  video.muted = true;
+  video.srcObject = stream;
+  await new Promise<void>((resolve) => { video.onloadedmetadata = () => resolve(); });
+  await video.play();
+  // Give browser two animation frames to paint
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  const canvas = document.createElement("canvas");
+  const scaleX = video.videoWidth / window.innerWidth;
+  const scaleY = video.videoHeight / window.innerHeight;
+
+  if (crop) {
+    canvas.width = Math.round(crop.w * scaleX);
+    canvas.height = Math.round(crop.h * scaleY);
+    canvas.getContext("2d")!.drawImage(
+      video,
+      Math.round(crop.x * scaleX), Math.round(crop.y * scaleY),
+      Math.round(crop.w * scaleX), Math.round(crop.h * scaleY),
+      0, 0, canvas.width, canvas.height
+    );
+  } else {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")!.drawImage(video, 0, 0);
+  }
+
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.88);
+  return toResult(dataUrl, crop ? "selection.jpg" : "page-view.jpg");
+}
+
+function cropBitmap(
+  bitmap: ImageBitmap,
+  crop: { x: number; y: number; w: number; h: number } | undefined,
+  stream: MediaStream
+): string {
+  const track = stream.getVideoTracks()[0];
+  const { width: vw, height: vh } = track.getSettings();
+  const scaleX = (vw || bitmap.width) / window.innerWidth;
+  const scaleY = (vh || bitmap.height) / window.innerHeight;
+
+  const canvas = document.createElement("canvas");
+  if (crop) {
+    canvas.width = Math.round(crop.w * scaleX);
+    canvas.height = Math.round(crop.h * scaleY);
+    canvas.getContext("2d")!.drawImage(
+      bitmap,
+      Math.round(crop.x * scaleX), Math.round(crop.y * scaleY),
+      Math.round(crop.w * scaleX), Math.round(crop.h * scaleY),
+      0, 0, canvas.width, canvas.height
+    );
+  } else {
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+  }
+  return canvas.toDataURL("image/jpeg", 0.88);
+}
+
+function toResult(dataUrl: string, fileName: string) {
+  return { base64: dataUrl.split(",")[1], mediaType: "image/jpeg", fileName, dataUrl };
+}
+
+/** Full-page capture for the auto-screenshot feature (crops to visible page area) */
+async function capturePageScreenshot(): Promise<{ base64: string; mediaType: string; fileName: string } | null> {
+  const chatWidth = parseInt(document.body.style.marginLeft || "0", 10);
+  const topOffset = 40;
+  const result = await captureFrame({
+    x: chatWidth, y: topOffset,
+    w: window.innerWidth - chatWidth,
+    h: window.innerHeight - topOffset,
+  });
+  return result;
 }
 
 /* ── Types ── */
@@ -517,26 +616,9 @@ function SelectionOverlay({ onSubmit, onCancel }: {
     setCapturing(true);
     let img: { base64: string; mediaType: string; fileName: string; dataUrl: string } | null = null;
     if (rect) {
-      try {
-        const { default: html2canvas } = await import("html2canvas");
-        // Body may be shifted right by the sidebar (marginLeft). Subtract that offset
-        // so the captured region aligns with what the user visually selected.
-        const bodyLeft = document.body.getBoundingClientRect().left;
-        const canvas = await html2canvas(document.body, {
-          x: rect.x - bodyLeft + window.scrollX,
-          y: rect.y + window.scrollY,
-          width: rect.w,
-          height: rect.h,
-          scale: 1,
-          useCORS: true,
-          logging: false,
-          ignoreElements: (el) => el === overlayRef.current,
-        });
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-        const base64 = dataUrl.split(",")[1];
-        img = { base64, mediaType: "image/jpeg", fileName: "selection.jpg", dataUrl };
-        setPreview(dataUrl);
-      } catch { /* non-fatal */ }
+      // Use getDisplayMedia for a true pixel-perfect screenshot of the selected region
+      img = await captureFrame(rect);
+      if (img) setPreview(img.dataUrl);
     }
     setCapturing(false);
     onSubmit(promptText, img);
@@ -1206,9 +1288,17 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
           New
         </button>
 
-        {/* Select mode button */}
+        {/* Select mode button — primes tab capture permission before showing overlay */}
         <button
-          onClick={() => setSelectMode((v) => !v)}
+          onClick={async () => {
+            if (!selectMode) {
+              // Pre-request tab capture permission so the dialog appears now,
+              // not mid-draw. If the user cancels, we just don't enter select mode.
+              const stream = await getTabStream();
+              if (!stream) return; // user declined permission
+            }
+            setSelectMode((v) => !v);
+          }}
           title="Select an area on the page to edit"
           className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
             selectMode
