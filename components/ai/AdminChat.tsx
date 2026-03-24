@@ -1,6 +1,37 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent, type DragEvent } from "react";
+import { createPortal } from "react-dom";
+
+/* ── Page screenshot capture ── */
+async function capturePageScreenshot(): Promise<{ base64: string; mediaType: string; fileName: string } | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    // Dynamically import html2canvas to avoid SSR issues
+    const { default: html2canvas } = await import("html2canvas");
+    // The admin chat panel pushes body via marginLeft — skip that width so we only capture the page
+    const chatWidth = parseInt(document.body.style.marginLeft || "0", 10);
+    const topOffset = 40; // admin toolbar height
+    const pageWidth = window.innerWidth - chatWidth;
+    const pageHeight = Math.min(window.innerHeight - topOffset, 1400);
+    const canvas = await html2canvas(document.documentElement, {
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      scale: 0.45, // Low res — keeps token cost minimal
+      x: chatWidth,
+      y: topOffset,
+      width: pageWidth,
+      height: pageHeight,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+    });
+    const base64 = canvas.toDataURL("image/jpeg", 0.55).split(",")[1];
+    return { base64, mediaType: "image/jpeg", fileName: "page-view.jpg" };
+  } catch {
+    return null;
+  }
+}
 
 /* ── Types ── */
 
@@ -23,6 +54,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   toolUses?: ToolUseBlock[];
+  images?: string[]; // data URLs for inline display (e.g. selection screenshots)
   timestamp: Date;
 }
 
@@ -49,15 +81,129 @@ interface AdminChatProps {
   userId: string;
   userName: string;
   currentPage?: string;
+  position?: "left" | "bottom";
+}
+
+/* ── Image Search Card ── */
+function ImageSearchCard({ input, onUse }: { input: Record<string, unknown>; onUse: (url: string) => void }) {
+  const [images, setImages] = useState<Array<{ url: string; thumb: string; description: string; credit: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [used, setUsed] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/cms/search-images", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: input.query, count: input.count || 4, orientation: input.orientation || "landscape" }),
+    })
+      .then(r => r.json())
+      .then(d => { setImages(d.images || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/30 overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-blue-100 bg-blue-50/50">
+        <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">🔍 Image Search</span>
+        <span className="text-xs text-gray-500 truncate">&ldquo;{String(input.query)}&rdquo;</span>
+      </div>
+      <div className="p-3">
+        {loading ? (
+          <div className="flex items-center gap-2 py-4 text-sm text-gray-500">
+            <svg className="animate-spin h-4 w-4 text-blue-500" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            Searching for images...
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {images.map((img, i) => (
+              <div key={i} className={`relative rounded-lg overflow-hidden border-2 transition-all ${used === img.url ? "border-green-400" : "border-transparent hover:border-blue-300"}`}>
+                <img src={img.thumb} alt={img.description} className="w-full h-24 object-cover" />
+                <div className="absolute inset-0 bg-black/0 hover:bg-black/30 transition-all flex items-end">
+                  <button
+                    onClick={() => { setUsed(img.url); onUse(img.url); }}
+                    className="w-full py-1.5 text-xs font-semibold text-white bg-blue-600/90 hover:bg-blue-700 transition-colors opacity-0 hover:opacity-100"
+                  >
+                    {used === img.url ? "✓ Selected" : "Use this photo"}
+                  </button>
+                </div>
+                {used === img.url && (
+                  <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">✓</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {!loading && images.length === 0 && (
+          <p className="text-xs text-gray-500 py-2">No images found. Try a different search term.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Image Generation Card ── */
+function ImageGenerateCard({ input, onUse }: { input: Record<string, unknown>; onUse: (url: string) => void }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [used, setUsed] = useState(false);
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    fetch("/api/cms/generate-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d.url) { setUrl(d.url); setNote(d.note || ""); }
+        else setError(d.error || "Generation failed");
+        setLoading(false);
+      })
+      .catch(() => { setError("Network error"); setLoading(false); });
+  }, []);
+
+  return (
+    <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50/20 overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-purple-100 bg-purple-50/40">
+        <span className="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">✨ AI Image</span>
+        <span className="text-xs text-gray-500 truncate">{String(input.prompt).slice(0, 60)}…</span>
+      </div>
+      <div className="p-3">
+        {loading ? (
+          <div className="flex flex-col items-center gap-3 py-6 text-sm text-gray-500">
+            <svg className="animate-spin h-6 w-6 text-purple" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+            <span>Generating image…</span>
+          </div>
+        ) : error ? (
+          <p className="text-xs text-red-600 py-2">⚠ {error}</p>
+        ) : url ? (
+          <>
+            <img src={url} alt="Generated" className="w-full rounded-lg object-cover max-h-48 mb-2" />
+            {note && <p className="text-[10px] text-amber-600 mb-2">{note}</p>}
+            <button
+              onClick={() => { setUsed(true); onUse(url); }}
+              className={`w-full rounded-lg py-2 text-xs font-semibold transition-colors ${used ? "bg-green-100 text-green-700" : "bg-purple text-white hover:bg-purple/90"}`}
+            >
+              {used ? "✓ Using this image" : "Use this image"}
+            </button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 /* ── Tool preview card renderer ── */
 function ToolPreviewCard({
   toolUse,
   onEdit,
+  onSendMessage,
 }: {
   toolUse: ToolUseBlock;
   onEdit?: (instruction: string) => void;
+  onSendMessage?: (msg: string) => void;
 }) {
   const input = toolUse.input;
   // Draft flow: idle → saving (auto-save as draft) → draft → publishing → published
@@ -87,8 +233,8 @@ function ToolPreviewCard({
   // Auto-save as draft when the card first appears
   useEffect(() => {
     if (state !== "idle") return;
-    // Don't auto-save analytics or non-content tools
-    if (["get_analytics", "send_newsletter_draft", "upload_image"].includes(toolUse.name)) return;
+    // Don't auto-save image tools or analytics/non-content tools
+    if (["search_images", "generate_image", "get_analytics", "send_newsletter_draft", "upload_image"].includes(toolUse.name)) return;
 
     const saveDraft = async () => {
       setState("saving");
@@ -104,6 +250,12 @@ function ToolPreviewCard({
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || `Error ${res.status}`);
 
+        // For new page sections (no prior published content), server returns status "published" — skip draft
+        if (toolUse.name === "update_page_content" && data.result?.status === "published") {
+          setState("published");
+          window.dispatchEvent(new Event("cms-published"));
+          return;
+        }
         // Store draft metadata for later publish
         if (data.draft?.table && data.draft?.id) {
           setDraftMeta({ table: data.draft.table, id: data.draft.id });
@@ -173,7 +325,7 @@ function ToolPreviewCard({
   const statusBadge = () => {
     switch (state) {
       case "saving": return <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">Saving draft...</span>;
-      case "draft": return <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">Draft — Preview it →</span>;
+      case "draft": return <button onClick={() => { window.dispatchEvent(new Event("cms-published")); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-200 transition-colors cursor-pointer">Draft — refresh preview ↻</button>;
       case "publishing": return <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold text-purple-700">Publishing...</span>;
       case "published": return <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">✓ Live</span>;
       case "discarded": return <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-500">Discarded</span>;
@@ -181,6 +333,19 @@ function ToolPreviewCard({
       default: return null;
     }
   };
+
+  /* ── Image tools render immediately without draft flow (after all hooks) ── */
+  if (toolUse.name === "search_images") {
+    return <ImageSearchCard input={input as Record<string, unknown>} onUse={(url) => {
+      onSendMessage?.(`Use this image on the page: ${url}`);
+    }} />;
+  }
+  if (toolUse.name === "generate_image") {
+    return <ImageGenerateCard input={input as Record<string, unknown>} onUse={(url) => {
+      const purpose = (input.purpose as string) || "";
+      onSendMessage?.(`The generated image is ready. Please update the page with this image URL: ${url}${purpose ? ` (purpose: ${purpose})` : ""}`);
+    }} />;
+  }
 
   return (
     <div className={`mt-3 rounded-xl border overflow-hidden shadow-sm ${
@@ -294,6 +459,185 @@ function ToolPreviewCard({
 }
 
 /* ── Typing indicator ── */
+/* ── Selection overlay — drag to select any part of the page ── */
+function SelectionOverlay({ onSubmit, onCancel }: {
+  onSubmit: (text: string, image: { base64: string; mediaType: string; fileName: string; dataUrl: string } | null) => void;
+  onCancel: () => void;
+}) {
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [popover, setPopover] = useState<{ x: number; y: number } | null>(null);
+  const [text, setText] = useState("");
+  const [capturing, setCapturing] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const QUICK = [
+    { label: "Remove it", prompt: "Please remove this element from the page." },
+    { label: "Change text", prompt: "Please update the text in this area." },
+    { label: "Find image", prompt: "Please find a good stock photo for this section." },
+    { label: "Generate image", prompt: "Please generate an AI image for this section." },
+    { label: "Change style", prompt: "Please update the styling or color scheme of this section." },
+    { label: "Make bigger", prompt: "Please make this section more prominent or larger." },
+  ];
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".selection-popover")) return;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    setRect(null);
+    setPopover(null);
+    setText("");
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragStart.current) return;
+    const x = Math.min(dragStart.current.x, e.clientX);
+    const y = Math.min(dragStart.current.y, e.clientY);
+    const w = Math.abs(e.clientX - dragStart.current.x);
+    const h = Math.abs(e.clientY - dragStart.current.y);
+    if (w > 8 || h > 8) setRect({ x, y, w, h });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!dragStart.current || !rect || rect.w < 20 || rect.h < 20) {
+      dragStart.current = null;
+      return;
+    }
+    dragStart.current = null;
+    // Position popover below/right of selection, clamped to viewport
+    const px = Math.min(rect.x, window.innerWidth - 320);
+    const py = Math.min(rect.y + rect.h + 8, window.innerHeight - 260);
+    setPopover({ x: px, y: py });
+    setTimeout(() => inputRef.current?.focus(), 50);
+    e.stopPropagation();
+  };
+
+  const capture = async (promptText: string) => {
+    setCapturing(true);
+    let img: { base64: string; mediaType: string; fileName: string; dataUrl: string } | null = null;
+    if (rect) {
+      try {
+        const { default: html2canvas } = await import("html2canvas");
+        // Body may be shifted right by the sidebar (marginLeft). Subtract that offset
+        // so the captured region aligns with what the user visually selected.
+        const bodyLeft = document.body.getBoundingClientRect().left;
+        const canvas = await html2canvas(document.body, {
+          x: rect.x - bodyLeft + window.scrollX,
+          y: rect.y + window.scrollY,
+          width: rect.w,
+          height: rect.h,
+          scale: 1,
+          useCORS: true,
+          logging: false,
+          ignoreElements: (el) => el === overlayRef.current,
+        });
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const base64 = dataUrl.split(",")[1];
+        img = { base64, mediaType: "image/jpeg", fileName: "selection.jpg", dataUrl };
+        setPreview(dataUrl);
+      } catch { /* non-fatal */ }
+    }
+    setCapturing(false);
+    onSubmit(promptText, img);
+  };
+
+  const handleSubmit = (prompt?: string) => {
+    const finalText = prompt || text.trim();
+    if (!finalText) return;
+    capture(finalText);
+  };
+
+  return createPortal(
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-[9998]"
+      style={{ cursor: rect && popover ? "default" : "crosshair" }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+    >
+      {/* Dim overlay */}
+      <div className="absolute inset-0 bg-black/20" />
+
+      {/* Escape hint */}
+      {!popover && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
+          Drag to select an area · Esc to cancel
+        </div>
+      )}
+
+      {/* Selection rectangle */}
+      {rect && (
+        <div
+          className="absolute border-2 border-purple bg-purple/10 pointer-events-none"
+          style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+        >
+          <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+          <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+          <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+          <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+        </div>
+      )}
+
+      {/* Popover */}
+      {popover && (
+        <div
+          className="selection-popover absolute z-[9999] w-72 rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden"
+          style={{ left: popover.x, top: popover.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 pt-3 pb-2 border-b border-gray-100">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">What do you want to do?</p>
+            <div className="flex gap-1.5">
+              <input
+                ref={inputRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }}
+                placeholder="Describe what to change..."
+                className="flex-1 text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 outline-none focus:border-purple focus:ring-1 focus:ring-purple/20"
+              />
+              <button
+                onClick={() => handleSubmit()}
+                disabled={!text.trim() || capturing}
+                className="rounded-lg bg-purple px-2.5 py-1.5 text-white disabled:opacity-40 hover:bg-purple-600 transition-colors"
+              >
+                {capturing ? (
+                  <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="p-2 grid grid-cols-2 gap-1">
+            {QUICK.map((q) => (
+              <button
+                key={q.label}
+                onClick={() => handleSubmit(q.prompt)}
+                disabled={capturing}
+                className="text-left text-xs rounded-lg px-2.5 py-2 border border-gray-100 text-gray-600 hover:bg-purple-50 hover:border-purple/30 hover:text-purple transition-colors disabled:opacity-40"
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+          <div className="px-3 pb-2 flex justify-end">
+            <button onClick={onCancel} className="text-[11px] text-gray-400 hover:text-gray-600">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+}
+
 function TypingIndicator() {
   return (
     <div className="flex justify-start animate-fade-in">
@@ -307,7 +651,8 @@ function TypingIndicator() {
 }
 
 /* ── Main component ── */
-export default function AdminChat({ userId: _userId, userName, currentPage }: AdminChatProps) {
+export default function AdminChat({ userId: _userId, userName, currentPage, position = "left" }: AdminChatProps) {
+  const isBottom = position === "bottom";
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -317,6 +662,11 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [previewPage, setPreviewPage] = useState(currentPage || "/");
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [autoScreenshot, setAutoScreenshot] = useState(true); // auto-capture with every message
+  const [selectMode, setSelectMode] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  const historyBtnRef = useRef<HTMLButtonElement>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -366,12 +716,19 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
       if (!conv.dbId || conv.messages.length > 0) return;
 
       try {
-        // Fetch the full session with messages
-        const res = await fetch(`/api/ai/admin/chat-sessions`);
+        const res = await fetch(`/api/ai/admin/chat-sessions?id=${conv.dbId}`);
         if (!res.ok) return;
-        // We need a way to get a single session — for now, re-fetch and find
-        // Actually, let's just fetch all and find ours. This is fine for a small admin app.
-        // In a real app, we'd have a GET /api/ai/admin/chat-sessions/:id endpoint.
+        const data = await res.json();
+        const raw = data.session?.messages;
+        const msgs: ChatMessage[] = Array.isArray(raw)
+          ? raw
+          : typeof raw === "string"
+          ? JSON.parse(raw)
+          : [];
+        if (msgs.length === 0) return;
+        setConversations((prev) =>
+          prev.map((c) => (c.id === conv.id ? { ...c, messages: msgs } : c))
+        );
       } catch {
         // Fail silently
       }
@@ -397,6 +754,13 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + "px";
     }
   }, [input]);
+
+  /* Escape cancels select mode */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectMode(false); };
+    window.addEventListener("keydown", handler as unknown as EventListener);
+    return () => window.removeEventListener("keydown", handler as unknown as EventListener);
+  }, []);
 
   /* Save conversation to Supabase (debounced) */
   const saveConversation = useCallback(
@@ -459,7 +823,11 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
 
   /* Send message */
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      extraImages?: { base64: string; mediaType: string; fileName: string }[],
+      displayImages?: string[]  // data URLs to show inline in the user bubble
+    ) => {
       if ((!text.trim() && attachedFiles.length === 0) || isLoading) return;
 
       let convId = activeConversationId;
@@ -478,17 +846,34 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
         id: crypto.randomUUID(),
         role: "user",
         content: contentWithFiles,
+        images: displayImages,
         timestamp: new Date(),
       };
 
-      // Collect image data to send to API
-      const images = attachedFiles
+      // Collect image data to send to API (user-attached files)
+      const userImages = attachedFiles
         .filter((f) => f.base64 && f.mediaType)
         .map((f) => ({
           base64: f.base64!,
           mediaType: f.mediaType!,
           fileName: f.file.name,
         }));
+
+      // Auto-capture page screenshot so the AI can see the current page visually.
+      // Skip if extraImages are provided (e.g. selection capture already gives focused context).
+      let pageScreenshot: { base64: string; mediaType: string; fileName: string } | null = null;
+      if (autoScreenshot && (!extraImages || extraImages.length === 0)) {
+        setIsCapturing(true);
+        pageScreenshot = await capturePageScreenshot();
+        setIsCapturing(false);
+      }
+
+      // Page screenshot goes first so Claude sees context before user files
+      const images = [
+        ...(pageScreenshot ? [pageScreenshot] : []),
+        ...(extraImages || []),
+        ...userImages,
+      ];
 
       // Non-image file names for context
       const nonImageFiles = attachedFiles
@@ -524,6 +909,13 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
         const uploadedImages = attachedFiles.filter((f) => f.uploadedUrl);
         if (uploadedImages.length > 0) {
           messageText += `\n\n[Image URLs already uploaded to storage: ${uploadedImages.map((f) => `${f.file.name} → ${f.uploadedUrl}`).join(", ")}. Use these exact URLs when updating page content — do not call upload_image.]`;
+        }
+
+        // Let Claude know what the attached image(s) represent
+        if (extraImages && extraImages.length > 0) {
+          messageText = `[The attached image is a screenshot of the specific area the staff member selected on the page. Focus your response on this selected region.]\n\n${messageText}`;
+        } else if (pageScreenshot) {
+          messageText = `[The first attached image is a real-time screenshot of the page the staff member is currently viewing on their screen. Use it to understand the current visual appearance, layout, and design before making changes.]\n\n${messageText}`;
         }
 
         const res = await fetch("/api/ai/admin", {
@@ -683,7 +1075,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
         setIsLoading(false);
       }
     },
-    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles, previewPage]
+    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles, previewPage, autoScreenshot]
   );
 
   /* Submit handler */
@@ -814,10 +1206,33 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
           New
         </button>
 
+        {/* Select mode button */}
+        <button
+          onClick={() => setSelectMode((v) => !v)}
+          title="Select an area on the page to edit"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            selectMode
+              ? "border-purple bg-purple text-white"
+              : "border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300"
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 3h5M3 3v5M21 3h-5M21 3v5M3 21h5M3 21v-5M21 21h-5M21 21v-5"/>
+          </svg>
+          Select
+        </button>
+
         {/* History dropdown toggle */}
         <div className="relative">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            ref={historyBtnRef}
+            onClick={() => {
+              if (!sidebarOpen && historyBtnRef.current) {
+                const rect = historyBtnRef.current.getBoundingClientRect();
+                setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+              }
+              setSidebarOpen(!sidebarOpen);
+            }}
             className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
               sidebarOpen
                 ? "border-purple bg-purple-50 text-purple"
@@ -833,11 +1248,13 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
             </svg>
           </button>
 
-          {/* History dropdown panel */}
+          {/* History dropdown panel — fixed so it escapes overflow:hidden on the chat panel */}
           {sidebarOpen && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setSidebarOpen(false)} />
-              <div className="absolute left-0 top-full mt-1 z-40 w-72 max-h-80 overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-lg chat-scrollbar">
+              <div className="fixed inset-0 z-[998]" onClick={() => setSidebarOpen(false)} />
+              <div className="fixed z-[999] w-72 max-h-80 overflow-y-auto rounded-xl bg-white border border-gray-200 shadow-lg chat-scrollbar"
+                style={{ top: dropdownPos.top, left: dropdownPos.left }}
+              >
                 {isLoadingSessions ? (
                   <div className="flex items-center justify-center py-6">
                     <svg className="animate-spin h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="none">
@@ -930,26 +1347,30 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
               <p className="text-sm text-gray-500 mb-6">
                 What would you like to update?
               </p>
-
-              {/* Quick action buttons */}
-              <div className="flex flex-col gap-1.5">
+              <div className={isBottom ? "flex flex-wrap justify-center gap-1.5" : "flex flex-col gap-1.5"}>
                 {[
                   { label: "Add Event", icon: <><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></>, prompt: "I need to add a new event." },
                   { label: "Update Hours", icon: <><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>, prompt: "I need to update the library hours." },
                   { label: "Post Announcement", icon: <><path d="M3 11l18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></>, prompt: "I want to post a new announcement." },
                   { label: "Staff Picks", icon: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>, prompt: "I want to add a new staff pick." },
                   { label: "Edit Page", icon: <><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>, prompt: "I need to edit page content." },
+                  { label: "Find Images", icon: <><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/><path d="M11 8v6M8 11h6"/></>, prompt: "Search for photos I can use on the website." },
+                  { label: "Generate Image", icon: <><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></>, prompt: "Generate a custom AI image for the website." },
+                  { label: "Redesign Page", icon: <><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></>, prompt: "Help me redesign this page — new text, new images, fresh look." },
                   { label: "Newsletter", icon: <><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></>, prompt: "I want to draft a newsletter." },
                 ].map((action) => (
                   <button
                     key={action.label}
                     onClick={() => sendMessage(action.prompt)}
-                    className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all text-left"
+                    className={isBottom
+                      ? "flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all"
+                      : "flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-500 hover:border-purple/30 hover:bg-purple/5 hover:text-purple transition-all text-left"
+                    }
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
+                    <svg width={isBottom ? 13 : 18} height={isBottom ? 13 : 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
                       {action.icon}
                     </svg>
-                    <span className="text-xs font-medium">{action.label}</span>
+                    <span className={isBottom ? "text-[11px] font-medium whitespace-nowrap" : "text-xs font-medium"}>{action.label}</span>
                   </button>
                 ))}
               </div>
@@ -973,6 +1394,20 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                         : "rounded-2xl rounded-bl-md bg-purple-50 px-4 py-3 w-full"
                     }`}
                   >
+                    {/* Inline screenshot thumbnails (selection captures) */}
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {msg.images.map((src, i) => (
+                          <img
+                            key={i}
+                            src={src}
+                            alt="Selected area"
+                            className="rounded-lg border border-white/20 max-h-32 max-w-full object-cover shadow-sm"
+                          />
+                        ))}
+                      </div>
+                    )}
+
                     {/* Text content */}
                     {msg.content && (
                       <div
@@ -993,6 +1428,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                           setInput(instruction);
                           textareaRef.current?.focus();
                         }}
+                        onSendMessage={(msg) => sendMessage(msg)}
                       />
                     ))}
                   </div>
@@ -1006,7 +1442,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
         )}
 
         {/* ─── Input area ─── */}
-        <div className="border-t border-gray-200 bg-white p-3 sm:p-4 pb-safe">
+        <div className="border-t border-gray-200 bg-white px-3 py-2 pb-safe">
           {/* Hidden file input */}
           <input
             ref={fileInputRef}
@@ -1079,7 +1515,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
               </div>
             )}
 
-            <div className="flex items-end gap-2 rounded-2xl bg-gray-50 border border-gray-200 px-3 py-2.5 transition-all">
+            <div className="flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-200 px-2.5 py-1.5 transition-all">
               {/* Attach file button */}
               <button
                 type="button"
@@ -1094,12 +1530,38 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
                 </svg>
               </button>
 
+              {/* Page vision toggle — eye icon */}
+              <button
+                type="button"
+                onClick={() => setAutoScreenshot((v) => !v)}
+                disabled={isLoading}
+                className={`shrink-0 rounded-lg p-1.5 transition-colors disabled:opacity-40 ${autoScreenshot ? "text-purple bg-purple/10 hover:bg-purple/20" : "text-gray-400 hover:text-purple hover:bg-purple/10"}`}
+                aria-label={autoScreenshot ? "Page vision ON — AI sees your screen" : "Page vision OFF — click to enable"}
+                title={autoScreenshot ? "Page vision ON — AI sees your screen with each message" : "Page vision OFF — click to enable"}
+              >
+                {isCapturing ? (
+                  <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                ) : autoScreenshot ? (
+                  /* Eye open */
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                ) : (
+                  /* Eye closed */
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                )}
+              </button>
+
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={attachedFiles.length > 0 ? "Add a message about these files..." : "Tell the AI what to update..."}
+                placeholder={attachedFiles.length > 0 ? "Add a message about these files..." : ""}
                 rows={1}
                 className="flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none resize-none leading-relaxed"
                 disabled={isLoading}
@@ -1116,11 +1578,26 @@ export default function AdminChat({ userId: _userId, userName, currentPage }: Ad
               </button>
             </div>
             <p className="text-center text-[10px] text-gray-400 mt-2">
-              Enter to send &middot; Shift+Enter for new line &middot; Drag &amp; drop or 📎 to attach files
+              Enter to send &middot; Shift+Enter for new line &middot; {autoScreenshot ? "👁 AI sees your page" : "👁 Page vision off"} &middot; 📎 to attach files
             </p>
           </form>
         </div>
       </div>
+
+      {/* Selection overlay — rendered outside sidebar via portal */}
+      {selectMode && (
+        <SelectionOverlay
+          onSubmit={(text, img) => {
+            setSelectMode(false);
+            sendMessage(
+              `[Selected area on page] ${text}`,
+              img ? [img] : undefined,
+              img ? [img.dataUrl] : undefined
+            );
+          }}
+          onCancel={() => setSelectMode(false)}
+        />
+      )}
     </div>
   );
 }

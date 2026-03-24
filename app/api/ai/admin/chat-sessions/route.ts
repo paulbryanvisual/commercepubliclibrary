@@ -4,12 +4,28 @@ import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
-/** GET — list all chat sessions for the current user */
+/** GET — list all chat sessions, or fetch a single session with messages via ?id= */
 export async function GET(request: NextRequest) {
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = await verifySession(token);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const sessionId = searchParams.get("id");
+
+  if (sessionId) {
+    // Single session with full messages
+    const { data, error } = await supabase
+      .from("chat_sessions")
+      .select("id, title, messages, created_at, updated_at")
+      .eq("id", sessionId)
+      .eq("user_id", session.userId)
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ session: data });
   }
 
   const { data, error } = await supabase

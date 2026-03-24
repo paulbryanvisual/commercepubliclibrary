@@ -6,8 +6,10 @@ import {
   updateEvent,
   deleteEvent,
   addAnnouncement,
+  deleteAnnouncement,
   addStaffPick,
   addClosure,
+  deleteClosure,
   updateHours,
   updatePageContent,
 } from "@/lib/cms/dataStore";
@@ -119,6 +121,13 @@ export async function POST(request: NextRequest) {
         );
         break;
 
+      case "delete_announcement":
+        action = "Deleted announcement";
+        result = await deleteAnnouncement(
+          toolInput as Parameters<typeof deleteAnnouncement>[0]
+        );
+        break;
+
       case "update_hours":
         action = "Updated hours (draft)";
         result = await updateHours(
@@ -130,6 +139,13 @@ export async function POST(request: NextRequest) {
         action = "Added closure (draft)";
         result = await addClosure(
           toolInput as Parameters<typeof addClosure>[0]
+        );
+        break;
+
+      case "delete_closure":
+        action = "Deleted closure";
+        result = await deleteClosure(
+          toolInput as Parameters<typeof deleteClosure>[0]
         );
         break;
 
@@ -145,6 +161,18 @@ export async function POST(request: NextRequest) {
         result = await updatePageContent(
           toolInput as Parameters<typeof updatePageContent>[0]
         );
+        break;
+
+      case "search_images":
+        action = "Searched images";
+        // Forwarded to /api/cms/search-images — handled client-side
+        result = { deferred: true, tool: "search_images", input: toolInput };
+        break;
+
+      case "generate_image":
+        action = "Generated image";
+        // Forwarded to /api/cms/generate-image — handled client-side
+        result = { deferred: true, tool: "generate_image", input: toolInput };
         break;
 
       case "upload_image":
@@ -176,6 +204,34 @@ export async function POST(request: NextRequest) {
             "Analytics integration not yet configured. Connect your analytics provider to see real data.",
         };
         break;
+
+      case "read_page": {
+        action = "Read page content";
+        const { getAllData } = await import("@/lib/cms/dataStore");
+        const cmsData = await getAllData();
+        const targetPage = (toolInput as { page: string }).page || "home";
+        const pageContent = cmsData.pageContent[targetPage] || {};
+        const now = new Date();
+        const upcomingEvents = cmsData.events
+          .filter(e => new Date(e.date) >= now && !e.cancelled)
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+          .slice(0, 5)
+          .map(e => ({ title: e.title, date: e.date, time: e.startTime, audience: e.audience, description: e.description.slice(0, 100) }));
+        const activeAnnouncements = cmsData.announcements
+          .filter(a => a.status === "published")
+          .slice(0, 5)
+          .map(a => ({ title: a.title, body: a.body.slice(0, 150), type: a.type }));
+        result = {
+          page: targetPage,
+          pageContent,
+          upcomingEvents: targetPage === "home" || targetPage === "events" ? upcomingEvents : undefined,
+          announcements: targetPage === "home" ? activeAnnouncements : undefined,
+          staffPicks: targetPage === "home" || targetPage === "about"
+            ? cmsData.staffPicks.filter(s => s.status === "published").slice(0, 3).map(s => ({ title: s.title, author: s.author, staffName: s.staffName, review: s.review.slice(0, 100) }))
+            : undefined,
+        };
+        break;
+      }
 
       default:
         return NextResponse.json(

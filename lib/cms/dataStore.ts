@@ -238,8 +238,10 @@ async function fetchData(mode: "published" | "all"): Promise<CMSData> {
   const pageContent: Record<string, Record<string, string>> = {};
   for (const row of pageRes.data || []) {
     if (!pageContent[row.page]) pageContent[row.page] = {};
-    // content column may be jsonb or text — normalize to plain string
-    const rawContent = row.content;
+    // In admin preview mode, show draft_content if pending; otherwise show published content
+    const rawContent = (mode === "all" && row.draft_content != null)
+      ? row.draft_content
+      : row.content;
     pageContent[row.page][row.section] =
       typeof rawContent === "string"
         ? rawContent
@@ -274,7 +276,7 @@ export async function addEvent(input: {
   const slug = input.title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-|-$/g, "") + "-" + Date.now();
 
   const { data, error } = await supabase
     .from("events")
@@ -370,6 +372,16 @@ export async function addAnnouncement(input: {
   return mapAnnouncement(data);
 }
 
+export async function deleteAnnouncement(input: {
+  announcement_id: string;
+  confirm: boolean;
+}): Promise<{ deleted: boolean; id: string }> {
+  if (!input.confirm) throw new Error("Deletion not confirmed");
+  const { error } = await supabase.from("announcements").delete().eq("id", input.announcement_id);
+  if (error) throw new Error(error.message);
+  return { deleted: true, id: input.announcement_id };
+}
+
 /* ── Staff Picks ── */
 
 export async function addStaffPick(input: {
@@ -423,6 +435,16 @@ export async function addClosure(input: {
   return mapClosure(data);
 }
 
+export async function deleteClosure(input: {
+  closure_id: string;
+  confirm: boolean;
+}): Promise<{ deleted: boolean; id: string }> {
+  if (!input.confirm) throw new Error("Deletion not confirmed");
+  const { error } = await supabase.from("closures").delete().eq("id", input.closure_id);
+  if (error) throw new Error(error.message);
+  return { deleted: true, id: input.closure_id };
+}
+
 /* ── Hours overrides ── */
 
 export async function updateHours(input: {
@@ -467,65 +489,60 @@ export async function updatePageContent(input: {
   section: string;
   content: string;
 }): Promise<CMSPageContent> {
-  // content is stored as text; ensure it's a plain string
   const contentValue = typeof input.content === "string"
     ? input.content
     : JSON.stringify(input.content);
 
-  // Try with status column first (requires migration to have been run)
-  const { data, error } = await supabase
+  // Check if a published row already exists for this page+section
+  const { data: existing } = await supabase
     .from("page_content")
-    .upsert(
-      {
+    .select("id")
+    .eq("page", input.page)
+    .eq("section", input.section)
+    .maybeSingle();
+
+  if (existing) {
+    // Existing row: write to draft_content only — live content is preserved until published
+    const { data, error } = await supabase
+      .from("page_content")
+      .update({ draft_content: contentValue, updated_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return {
+      id: data.id,
+      page: data.page,
+      section: data.section,
+      content: contentValue,
+      status: "draft",
+      updatedAt: data.updated_at,
+    };
+  } else {
+    // New section: publish immediately (nothing to draft from)
+    const { data, error } = await supabase
+      .from("page_content")
+      .insert({
         page: input.page,
         section: input.section,
         content: contentValue,
         status: "published",
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: "page,section" }
-    )
-    .select()
-    .single();
+      })
+      .select()
+      .single();
 
-  if (error) {
-    // If status column doesn't exist yet (migration not run), retry without it
-    if (error.message?.includes("status") || error.message?.includes("column")) {
-      const { data: data2, error: error2 } = await supabase
-        .from("page_content")
-        .upsert(
-          {
-            page: input.page,
-            section: input.section,
-            content: contentValue,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "page,section" }
-        )
-        .select()
-        .single();
-
-      if (error2) throw new Error(error2.message);
-      return {
-        id: data2.id,
-        page: data2.page,
-        section: data2.section,
-        content: typeof data2.content === "string" ? data2.content : JSON.stringify(data2.content),
-        status: "published",
-        updatedAt: data2.updated_at,
-      };
-    }
-    throw new Error(error.message);
+    if (error) throw new Error(error.message);
+    return {
+      id: data.id,
+      page: data.page,
+      section: data.section,
+      content: contentValue,
+      status: "published",
+      updatedAt: data.updated_at,
+    };
   }
-
-  return {
-    id: data.id,
-    page: data.page,
-    section: data.section,
-    content: typeof data.content === "string" ? data.content : JSON.stringify(data.content),
-    status: data.status || "draft",
-    updatedAt: data.updated_at,
-  };
 }
 
 /* ── Publish / Discard ── */
@@ -535,6 +552,24 @@ export async function publishItem(
   table: string,
   id: string
 ): Promise<void> {
+  if (table === "page_content") {
+    // Copy draft_content → content, clear draft_content
+    const { data: row, error: fetchErr } = await supabase
+      .from("page_content")
+      .select("draft_content")
+      .eq("id", id)
+      .single();
+    if (fetchErr) throw new Error(fetchErr.message);
+    if (!row?.draft_content) return; // Nothing to publish
+
+    const { error } = await supabase
+      .from("page_content")
+      .update({ content: row.draft_content, draft_content: null, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
   const { error } = await supabase
     .from(table)
     .update({ status: "published", updated_at: new Date().toISOString() })
@@ -566,6 +601,16 @@ export async function discardDraft(
   table: string,
   id: string
 ): Promise<void> {
+  if (table === "page_content") {
+    // Just clear draft_content — preserve the published content row
+    const { error } = await supabase
+      .from("page_content")
+      .update({ draft_content: null, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
   const { error } = await supabase
     .from(table)
     .delete()
@@ -577,7 +622,7 @@ export async function discardDraft(
 
 /** Get count of pending drafts across all tables. */
 export async function getDraftCount(): Promise<number> {
-  const tables = ["events", "announcements", "staff_picks", "closures", "hours_overrides", "page_content"];
+  const tables = ["events", "announcements", "staff_picks", "closures", "hours_overrides"];
   let count = 0;
 
   for (const table of tables) {
@@ -585,9 +630,15 @@ export async function getDraftCount(): Promise<number> {
       .from(table)
       .select("id", { count: "exact", head: true })
       .eq("status", "draft");
-
     count += c || 0;
   }
+
+  // page_content drafts use draft_content column instead of status
+  const { count: pageCount } = await supabase
+    .from("page_content")
+    .select("id", { count: "exact", head: true })
+    .not("draft_content", "is", null);
+  count += pageCount || 0;
 
   return count;
 }
