@@ -54,6 +54,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   toolUses?: ToolUseBlock[];
+  images?: string[]; // data URLs for inline display (e.g. selection screenshots)
   timestamp: Date;
 }
 
@@ -460,13 +461,14 @@ function ToolPreviewCard({
 /* ── Typing indicator ── */
 /* ── Selection overlay — drag to select any part of the page ── */
 function SelectionOverlay({ onSubmit, onCancel }: {
-  onSubmit: (text: string, image: { base64: string; mediaType: string; fileName: string } | null) => void;
+  onSubmit: (text: string, image: { base64: string; mediaType: string; fileName: string; dataUrl: string } | null) => void;
   onCancel: () => void;
 }) {
   const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [popover, setPopover] = useState<{ x: number; y: number } | null>(null);
   const [text, setText] = useState("");
   const [capturing, setCapturing] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -513,12 +515,15 @@ function SelectionOverlay({ onSubmit, onCancel }: {
 
   const capture = async (promptText: string) => {
     setCapturing(true);
-    let img: { base64: string; mediaType: string; fileName: string } | null = null;
+    let img: { base64: string; mediaType: string; fileName: string; dataUrl: string } | null = null;
     if (rect) {
       try {
         const { default: html2canvas } = await import("html2canvas");
+        // Body may be shifted right by the sidebar (marginLeft). Subtract that offset
+        // so the captured region aligns with what the user visually selected.
+        const bodyLeft = document.body.getBoundingClientRect().left;
         const canvas = await html2canvas(document.body, {
-          x: rect.x + window.scrollX,
+          x: rect.x - bodyLeft + window.scrollX,
           y: rect.y + window.scrollY,
           width: rect.w,
           height: rect.h,
@@ -527,8 +532,10 @@ function SelectionOverlay({ onSubmit, onCancel }: {
           logging: false,
           ignoreElements: (el) => el === overlayRef.current,
         });
-        const base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-        img = { base64, mediaType: "image/jpeg", fileName: "selection.jpg" };
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const base64 = dataUrl.split(",")[1];
+        img = { base64, mediaType: "image/jpeg", fileName: "selection.jpg", dataUrl };
+        setPreview(dataUrl);
       } catch { /* non-fatal */ }
     }
     setCapturing(false);
@@ -816,7 +823,11 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
 
   /* Send message */
   const sendMessage = useCallback(
-    async (text: string, extraImages?: { base64: string; mediaType: string; fileName: string }[]) => {
+    async (
+      text: string,
+      extraImages?: { base64: string; mediaType: string; fileName: string }[],
+      displayImages?: string[]  // data URLs to show inline in the user bubble
+    ) => {
       if ((!text.trim() && attachedFiles.length === 0) || isLoading) return;
 
       let convId = activeConversationId;
@@ -835,6 +846,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
         id: crypto.randomUUID(),
         role: "user",
         content: contentWithFiles,
+        images: displayImages,
         timestamp: new Date(),
       };
 
@@ -847,9 +859,10 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
           fileName: f.file.name,
         }));
 
-      // Auto-capture page screenshot so the AI can see the current page visually
+      // Auto-capture page screenshot so the AI can see the current page visually.
+      // Skip if extraImages are provided (e.g. selection capture already gives focused context).
       let pageScreenshot: { base64: string; mediaType: string; fileName: string } | null = null;
-      if (autoScreenshot) {
+      if (autoScreenshot && (!extraImages || extraImages.length === 0)) {
         setIsCapturing(true);
         pageScreenshot = await capturePageScreenshot();
         setIsCapturing(false);
@@ -898,8 +911,10 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
           messageText += `\n\n[Image URLs already uploaded to storage: ${uploadedImages.map((f) => `${f.file.name} → ${f.uploadedUrl}`).join(", ")}. Use these exact URLs when updating page content — do not call upload_image.]`;
         }
 
-        // Let Claude know the first attached image is the live page view
-        if (pageScreenshot) {
+        // Let Claude know what the attached image(s) represent
+        if (extraImages && extraImages.length > 0) {
+          messageText = `[The attached image is a screenshot of the specific area the staff member selected on the page. Focus your response on this selected region.]\n\n${messageText}`;
+        } else if (pageScreenshot) {
           messageText = `[The first attached image is a real-time screenshot of the page the staff member is currently viewing on their screen. Use it to understand the current visual appearance, layout, and design before making changes.]\n\n${messageText}`;
         }
 
@@ -1060,7 +1075,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
         setIsLoading(false);
       }
     },
-    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles, previewPage]
+    [activeConversationId, conversations, isLoading, startConversation, saveConversation, attachedFiles, previewPage, autoScreenshot]
   );
 
   /* Submit handler */
@@ -1379,6 +1394,20 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
                         : "rounded-2xl rounded-bl-md bg-purple-50 px-4 py-3 w-full"
                     }`}
                   >
+                    {/* Inline screenshot thumbnails (selection captures) */}
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {msg.images.map((src, i) => (
+                          <img
+                            key={i}
+                            src={src}
+                            alt="Selected area"
+                            className="rounded-lg border border-white/20 max-h-32 max-w-full object-cover shadow-sm"
+                          />
+                        ))}
+                      </div>
+                    )}
+
                     {/* Text content */}
                     {msg.content && (
                       <div
@@ -1562,7 +1591,8 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             setSelectMode(false);
             sendMessage(
               `[Selected area on page] ${text}`,
-              img ? [img] : undefined
+              img ? [img] : undefined,
+              img ? [img.dataUrl] : undefined
             );
           }}
           onCancel={() => setSelectMode(false)}
