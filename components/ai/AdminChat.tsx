@@ -739,7 +739,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
