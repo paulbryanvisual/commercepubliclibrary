@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 
 /* ── Page screenshot capture ── */
 async function capturePageScreenshot(): Promise<{ base64: string; mediaType: string; fileName: string } | null> {
@@ -457,6 +458,179 @@ function ToolPreviewCard({
 }
 
 /* ── Typing indicator ── */
+/* ── Selection overlay — drag to select any part of the page ── */
+function SelectionOverlay({ onSubmit, onCancel }: {
+  onSubmit: (text: string, image: { base64: string; mediaType: string; fileName: string } | null) => void;
+  onCancel: () => void;
+}) {
+  const [rect, setRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [popover, setPopover] = useState<{ x: number; y: number } | null>(null);
+  const [text, setText] = useState("");
+  const [capturing, setCapturing] = useState(false);
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const QUICK = [
+    { label: "Remove it", prompt: "Please remove this element from the page." },
+    { label: "Change text", prompt: "Please update the text in this area." },
+    { label: "Find image", prompt: "Please find a good stock photo for this section." },
+    { label: "Generate image", prompt: "Please generate an AI image for this section." },
+    { label: "Change style", prompt: "Please update the styling or color scheme of this section." },
+    { label: "Make bigger", prompt: "Please make this section more prominent or larger." },
+  ];
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".selection-popover")) return;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    setRect(null);
+    setPopover(null);
+    setText("");
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragStart.current) return;
+    const x = Math.min(dragStart.current.x, e.clientX);
+    const y = Math.min(dragStart.current.y, e.clientY);
+    const w = Math.abs(e.clientX - dragStart.current.x);
+    const h = Math.abs(e.clientY - dragStart.current.y);
+    if (w > 8 || h > 8) setRect({ x, y, w, h });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!dragStart.current || !rect || rect.w < 20 || rect.h < 20) {
+      dragStart.current = null;
+      return;
+    }
+    dragStart.current = null;
+    // Position popover below/right of selection, clamped to viewport
+    const px = Math.min(rect.x, window.innerWidth - 320);
+    const py = Math.min(rect.y + rect.h + 8, window.innerHeight - 260);
+    setPopover({ x: px, y: py });
+    setTimeout(() => inputRef.current?.focus(), 50);
+    e.stopPropagation();
+  };
+
+  const capture = async (promptText: string) => {
+    setCapturing(true);
+    let img: { base64: string; mediaType: string; fileName: string } | null = null;
+    if (rect) {
+      try {
+        const { default: html2canvas } = await import("html2canvas");
+        const canvas = await html2canvas(document.body, {
+          x: rect.x + window.scrollX,
+          y: rect.y + window.scrollY,
+          width: rect.w,
+          height: rect.h,
+          scale: 1,
+          useCORS: true,
+          logging: false,
+          ignoreElements: (el) => el === overlayRef.current,
+        });
+        const base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+        img = { base64, mediaType: "image/jpeg", fileName: "selection.jpg" };
+      } catch { /* non-fatal */ }
+    }
+    setCapturing(false);
+    onSubmit(promptText, img);
+  };
+
+  const handleSubmit = (prompt?: string) => {
+    const finalText = prompt || text.trim();
+    if (!finalText) return;
+    capture(finalText);
+  };
+
+  return createPortal(
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-[9998]"
+      style={{ cursor: rect && popover ? "default" : "crosshair" }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+    >
+      {/* Dim overlay */}
+      <div className="absolute inset-0 bg-black/20" />
+
+      {/* Escape hint */}
+      {!popover && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none">
+          Drag to select an area · Esc to cancel
+        </div>
+      )}
+
+      {/* Selection rectangle */}
+      {rect && (
+        <div
+          className="absolute border-2 border-purple bg-purple/10 pointer-events-none"
+          style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}
+        >
+          <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+          <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+          <div className="absolute -bottom-1 -left-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+          <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-purple rounded-sm" />
+        </div>
+      )}
+
+      {/* Popover */}
+      {popover && (
+        <div
+          className="selection-popover absolute z-[9999] w-72 rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden"
+          style={{ left: popover.x, top: popover.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 pt-3 pb-2 border-b border-gray-100">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">What do you want to do?</p>
+            <div className="flex gap-1.5">
+              <input
+                ref={inputRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }}
+                placeholder="Describe what to change..."
+                className="flex-1 text-xs rounded-lg border border-gray-200 px-2.5 py-1.5 outline-none focus:border-purple focus:ring-1 focus:ring-purple/20"
+              />
+              <button
+                onClick={() => handleSubmit()}
+                disabled={!text.trim() || capturing}
+                className="rounded-lg bg-purple px-2.5 py-1.5 text-white disabled:opacity-40 hover:bg-purple-600 transition-colors"
+              >
+                {capturing ? (
+                  <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+          <div className="p-2 grid grid-cols-2 gap-1">
+            {QUICK.map((q) => (
+              <button
+                key={q.label}
+                onClick={() => handleSubmit(q.prompt)}
+                disabled={capturing}
+                className="text-left text-xs rounded-lg px-2.5 py-2 border border-gray-100 text-gray-600 hover:bg-purple-50 hover:border-purple/30 hover:text-purple transition-colors disabled:opacity-40"
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+          <div className="px-3 pb-2 flex justify-end">
+            <button onClick={onCancel} className="text-[11px] text-gray-400 hover:text-gray-600">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body
+  );
+}
+
 function TypingIndicator() {
   return (
     <div className="flex justify-start animate-fade-in">
@@ -483,6 +657,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
   const [previewPage, setPreviewPage] = useState(currentPage || "/");
   const [isCapturing, setIsCapturing] = useState(false);
   const [autoScreenshot, setAutoScreenshot] = useState(true); // auto-capture with every message
+  const [selectMode, setSelectMode] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const historyBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -573,6 +748,13 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
     }
   }, [input]);
 
+  /* Escape cancels select mode */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectMode(false); };
+    window.addEventListener("keydown", handler as unknown as EventListener);
+    return () => window.removeEventListener("keydown", handler as unknown as EventListener);
+  }, []);
+
   /* Save conversation to Supabase (debounced) */
   const saveConversation = useCallback(
     (conv: Conversation) => {
@@ -634,7 +816,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
 
   /* Send message */
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, extraImages?: { base64: string; mediaType: string; fileName: string }[]) => {
       if ((!text.trim() && attachedFiles.length === 0) || isLoading) return;
 
       let convId = activeConversationId;
@@ -676,6 +858,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
       // Page screenshot goes first so Claude sees context before user files
       const images = [
         ...(pageScreenshot ? [pageScreenshot] : []),
+        ...(extraImages || []),
         ...userImages,
       ];
 
@@ -1006,6 +1189,22 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             <path d="M12 5v14M5 12h14" />
           </svg>
           New
+        </button>
+
+        {/* Select mode button */}
+        <button
+          onClick={() => setSelectMode((v) => !v)}
+          title="Select an area on the page to edit"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            selectMode
+              ? "border-purple bg-purple text-white"
+              : "border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300"
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 3h5M3 3v5M21 3h-5M21 3v5M3 21h5M3 21v-5M21 21h-5M21 21v-5"/>
+          </svg>
+          Select
         </button>
 
         {/* History dropdown toggle */}
@@ -1355,6 +1554,20 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
           </form>
         </div>
       </div>
+
+      {/* Selection overlay — rendered outside sidebar via portal */}
+      {selectMode && (
+        <SelectionOverlay
+          onSubmit={(text, img) => {
+            setSelectMode(false);
+            sendMessage(
+              `[Selected area on page] ${text}`,
+              img ? [img] : undefined
+            );
+          }}
+          onCancel={() => setSelectMode(false)}
+        />
+      )}
     </div>
   );
 }
