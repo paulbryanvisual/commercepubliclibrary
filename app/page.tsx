@@ -118,6 +118,9 @@ export default async function HomePage({
   const heroTitle = cmsPageContent.hero_title || null;
   const heroSubtitle = cmsPageContent.hero_subtitle || null;
   const heroDescription = cmsPageContent.hero_description || null;
+  // CMS-controlled colors — accepts any valid CSS color or gradient string
+  const heroBgColor = cmsPageContent.hero_bg_color || null;       // e.g. "#556B2F" or "linear-gradient(...)"
+  const heroAccentColor = cmsPageContent.hero_accent_color || null; // e.g. "#9DC183" (subtitle / chip color)
 
   // Use CMS staff picks if any exist, otherwise use defaults
   const cmsStaffPicks = cms.staffPicks.length > 0 ? cms.staffPicks : null;
@@ -132,8 +135,12 @@ export default async function HomePage({
     <div className="min-h-screen">
       {/* ─── HERO ─── */}
       <section className="relative overflow-hidden">
-        {/* Background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-dark via-primary-mid to-primary-300" />
+        {/* Background — CMS color overrides the default teal gradient when set */}
+        {heroBgColor ? (
+          <div className="absolute inset-0" style={{ background: heroBgColor }} />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-primary-dark via-primary-mid to-primary-300" />
+        )}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(255,255,255,0.15),transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(93,202,165,0.2),transparent_60%)]" />
 
@@ -144,7 +151,10 @@ export default async function HomePage({
               <h1 className="text-4xl md:text-[52px] font-semibold text-white leading-[1.1] mb-5 tracking-tight">
                 {heroTitle || "Your library."}
                 <br />
-                <span className="text-primary-200">{heroSubtitle || "Your community."}</span>
+                <span
+                  className="text-primary-200"
+                  style={heroAccentColor ? { color: heroAccentColor } : undefined}
+                >{heroSubtitle || "Your community."}</span>
               </h1>
               <p className="text-lg md:text-xl text-primary-100/90 mb-8 max-w-md leading-relaxed">
                 {heroDescription || "Free books, ebooks, events, passport services, and more — for everyone in Hunt County."}
