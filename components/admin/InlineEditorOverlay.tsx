@@ -15,6 +15,14 @@ interface SaveState {
   message?: string;
 }
 
+interface HoveredItem {
+  el: HTMLElement;
+  type: string;
+  slug?: string;
+  id?: string;
+  title?: string;
+}
+
 /**
  * InlineEditorOverlay
  *
@@ -24,20 +32,40 @@ interface SaveState {
  * 3. Save Draft → saves to draft_content via the execute API
  * 4. Publish → saves draft then immediately publishes to live
  * 5. Cancel → restores original text
+ *
+ * Also handles [data-cms-item] elements (events, announcements, staff picks):
+ * - Hover shows a floating action badge for editing dynamic content
  */
 export default function InlineEditorOverlay() {
   const router = useRouter();
+
+  /* ── Text edit state ── */
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
   const [toolbarPos, setToolbarPos] = useState({ top: 0, left: 0 });
   const toolbarRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<MutationObserver | null>(null);
 
+  /* ── Item hover state ── */
+  const [hoveredItem, setHoveredItem] = useState<HoveredItem | null>(null);
+  const [itemOverlayPos, setItemOverlayPos] = useState({ top: 0, left: 0 });
+  const itemLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* ── Position the item overlay at the top-right of the element ── */
+  const positionItemOverlay = useCallback((el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    const overlayWidth = 148;
+    setItemOverlayPos({
+      top: rect.top + 8,
+      left: Math.max(8, rect.right - overlayWidth - 8),
+    });
+  }, []);
+
   /* ── Apply hover/click styles to all [data-cms-editable] elements ── */
   const attachHandlers = useCallback(() => {
     const els = document.querySelectorAll<HTMLElement>("[data-cms-editable]");
     els.forEach((el) => {
-      if (el.dataset.inlineHandled) return; // already attached
+      if (el.dataset.inlineHandled) return;
       el.dataset.inlineHandled = "true";
 
       el.addEventListener("mouseenter", () => {
@@ -53,15 +81,44 @@ export default function InlineEditorOverlay() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── Apply hover styles to all [data-cms-item] elements ── */
+  const attachItemHandlers = useCallback(() => {
+    const els = document.querySelectorAll<HTMLElement>("[data-cms-item]");
+    els.forEach((el) => {
+      if (el.dataset.cmsItemHandled) return;
+      el.dataset.cmsItemHandled = "true";
+
+      el.addEventListener("mouseenter", () => {
+        if (itemLeaveTimer.current) clearTimeout(itemLeaveTimer.current);
+        positionItemOverlay(el);
+        setHoveredItem({
+          el,
+          type: el.dataset.cmsItemType || "",
+          slug: el.dataset.cmsItemSlug,
+          id: el.dataset.cmsItemId,
+          title: el.dataset.cmsItemTitle,
+        });
+      });
+
+      el.addEventListener("mouseleave", () => {
+        itemLeaveTimer.current = setTimeout(() => setHoveredItem(null), 180);
+      });
+    });
+  }, [positionItemOverlay]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* ── Watch for DOM changes (e.g. after router.refresh) ── */
   useEffect(() => {
     attachHandlers();
+    attachItemHandlers();
 
-    observerRef.current = new MutationObserver(() => attachHandlers());
+    observerRef.current = new MutationObserver(() => {
+      attachHandlers();
+      attachItemHandlers();
+    });
     observerRef.current.observe(document.body, { childList: true, subtree: true });
 
     // Re-attach after CMS publishes (page refreshes)
-    const onPublish = () => setTimeout(attachHandlers, 600);
+    const onPublish = () => setTimeout(() => { attachHandlers(); attachItemHandlers(); }, 600);
     window.addEventListener("cms-published", onPublish);
 
     return () => {
@@ -73,8 +130,23 @@ export default function InlineEditorOverlay() {
         el.classList.remove("cms-editable-hover", "cms-editable-active");
         delete el.dataset.inlineHandled;
       });
+      document.querySelectorAll<HTMLElement>("[data-cms-item]").forEach((el) => {
+        delete el.dataset.cmsItemHandled;
+      });
     };
-  }, [attachHandlers]);
+  }, [attachHandlers, attachItemHandlers]);
+
+  /* ── Reposition item overlay on scroll/resize ── */
+  useEffect(() => {
+    if (!hoveredItem) return;
+    const reposition = () => positionItemOverlay(hoveredItem.el);
+    window.addEventListener("scroll", reposition, { passive: true });
+    window.addEventListener("resize", reposition);
+    return () => {
+      window.removeEventListener("scroll", reposition);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [hoveredItem, positionItemOverlay]);
 
   /* ── Activate editing on a specific element ── */
   const activateEdit = useCallback((el: HTMLElement) => {
@@ -195,7 +267,7 @@ export default function InlineEditorOverlay() {
     }
   }, [saveDraft, activeEdit, deactivate, router]);
 
-  /* ── Reposition toolbar on scroll/resize ── */
+  /* ── Reposition text toolbar on scroll/resize ── */
   useEffect(() => {
     if (!activeEdit) return;
     const reposition = () => positionToolbar(activeEdit.el);
@@ -244,85 +316,166 @@ export default function InlineEditorOverlay() {
         caret-color: rgba(83, 74, 183, 1);
         white-space: pre-wrap;
       }
+      [data-cms-item] {
+        position: relative;
+        transition: box-shadow 0.15s ease;
+      }
+      [data-cms-item]:hover {
+        box-shadow: 0 0 0 2px rgba(83, 74, 183, 0.35), 0 4px 20px rgba(83, 74, 183, 0.1) !important;
+      }
     `;
     document.head.appendChild(style);
   }, []);
 
-  if (!activeEdit) return null;
-
   const isSaving = saveState.status === "saving";
 
+  /* ── Item type metadata ── */
+  const itemMeta: Record<string, { label: string; color: string }> = {
+    event: { label: "Event", color: "#1D9E75" },
+    announcement: { label: "Announcement", color: "#534AB7" },
+    "staff-pick": { label: "Staff Pick", color: "#534AB7" },
+  };
+
   return (
-    <div
-      ref={toolbarRef}
-      className="fixed z-[9990] flex items-center gap-1.5 rounded-xl bg-white shadow-xl border border-gray-200 px-2.5 py-1.5 select-none"
-      style={{ top: toolbarPos.top, left: Math.max(8, toolbarPos.left) }}
-      onMouseDown={(e) => e.preventDefault()} // prevent blur on toolbar click
-    >
-      {/* Section label */}
-      <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mr-1">
-        {activeEdit.section.replace(/_/g, " ")}
-      </span>
-      <div className="w-px h-4 bg-gray-200" />
+    <>
+      {/* ── Text edit toolbar ── */}
+      {activeEdit && (
+        <div
+          ref={toolbarRef}
+          className="fixed z-[9990] flex items-center gap-1.5 rounded-xl bg-white shadow-xl border border-gray-200 px-2.5 py-1.5 select-none"
+          style={{ top: toolbarPos.top, left: Math.max(8, toolbarPos.left) }}
+          onMouseDown={(e) => e.preventDefault()} // prevent blur on toolbar click
+        >
+          {/* Section label */}
+          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mr-1">
+            {activeEdit.section.replace(/_/g, " ")}
+          </span>
+          <div className="w-px h-4 bg-gray-200" />
 
-      {/* Save draft */}
-      <button
-        onClick={handleSaveDraft}
-        disabled={isSaving}
-        className="flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
-        title="Save as draft (⌘S)"
-      >
-        {isSaving ? (
-          <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-          </svg>
-        ) : (
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-            <polyline points="17 21 17 13 7 13 7 21" />
-            <polyline points="7 3 7 8 15 8" />
-          </svg>
-        )}
-        Draft
-      </button>
+          {/* Save draft */}
+          <button
+            onClick={handleSaveDraft}
+            disabled={isSaving}
+            className="flex items-center gap-1 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+            title="Save as draft (⌘S)"
+          >
+            {isSaving ? (
+              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+              </svg>
+            )}
+            Draft
+          </button>
 
-      {/* Publish */}
-      <button
-        onClick={handlePublish}
-        disabled={isSaving}
-        className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
-        title="Publish to live site (⌘↵)"
-      >
-        {isSaving ? (
-          <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-          </svg>
-        ) : (
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
-          </svg>
-        )}
-        Publish
-      </button>
+          {/* Publish */}
+          <button
+            onClick={handlePublish}
+            disabled={isSaving}
+            className="flex items-center gap-1 rounded-lg bg-green-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+            title="Publish to live site (⌘↵)"
+          >
+            {isSaving ? (
+              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+              </svg>
+            ) : (
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
+              </svg>
+            )}
+            Publish
+          </button>
 
-      {/* Status message */}
-      {saveState.status === "saved" && (
-        <span className="text-[10px] font-semibold text-green-600">{saveState.message}</span>
+          {/* Status message */}
+          {saveState.status === "saved" && (
+            <span className="text-[10px] font-semibold text-green-600">{saveState.message}</span>
+          )}
+          {saveState.status === "error" && (
+            <span className="text-[10px] font-semibold text-red-500">{saveState.message}</span>
+          )}
+
+          {/* Cancel */}
+          <button
+            onClick={handleCancel}
+            className="ml-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+            title="Cancel (Esc)"
+          >
+            ✕
+          </button>
+        </div>
       )}
-      {saveState.status === "error" && (
-        <span className="text-[10px] font-semibold text-red-500">{saveState.message}</span>
-      )}
 
-      {/* Cancel */}
-      <button
-        onClick={handleCancel}
-        className="ml-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-medium text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-        title="Cancel (Esc)"
-      >
-        ✕
-      </button>
-    </div>
+      {/* ── Item hover overlay ── */}
+      {hoveredItem && (
+        <div
+          className="fixed z-[9989] flex flex-col gap-1 rounded-xl bg-white shadow-xl border border-gray-200 p-1.5 select-none pointer-events-auto"
+          style={{ top: itemOverlayPos.top, left: itemOverlayPos.left }}
+          onMouseEnter={() => {
+            if (itemLeaveTimer.current) clearTimeout(itemLeaveTimer.current);
+          }}
+          onMouseLeave={() => {
+            itemLeaveTimer.current = setTimeout(() => setHoveredItem(null), 100);
+          }}
+        >
+          {/* Type label */}
+          <div
+            className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-md"
+            style={{
+              color: itemMeta[hoveredItem.type]?.color || "#666",
+              background: `${itemMeta[hoveredItem.type]?.color || "#666"}18`,
+            }}
+          >
+            {itemMeta[hoveredItem.type]?.label || hoveredItem.type}
+          </div>
+
+          {/* Event → navigate to event page in preview mode */}
+          {hoveredItem.type === "event" && hoveredItem.slug && (
+            <a
+              href={`/events/${hoveredItem.slug}?preview=true`}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white transition-colors"
+              style={{ background: itemMeta.event.color }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+              Edit Event
+            </a>
+          )}
+
+          {/* Announcement / Staff Pick → pre-fill AI chat */}
+          {(hoveredItem.type === "announcement" || hoveredItem.type === "staff-pick") && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const message = hoveredItem.type === "announcement"
+                  ? `Edit the announcement: "${hoveredItem.title}"`
+                  : `Edit the staff pick for "${hoveredItem.title}"`;
+                window.dispatchEvent(new CustomEvent("cms-quick-edit", {
+                  detail: { type: hoveredItem.type, id: hoveredItem.id, title: hoveredItem.title, message },
+                }));
+                setHoveredItem(null);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold text-white transition-colors"
+              style={{ background: itemMeta[hoveredItem.type]?.color || "#534AB7" }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+              </svg>
+              Edit with AI
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 }

@@ -99,6 +99,10 @@ export default function EventsCarousel() {
               key={i}
               href={`/events/${event.slug}`}
               className="group min-w-[290px] max-w-[290px] snap-start rounded-2xl border border-gray-200 bg-white shadow-sm hover:shadow-lg hover:border-primary-border transition-all duration-300 overflow-hidden"
+              data-cms-item="true"
+              data-cms-item-type="event"
+              data-cms-item-slug={event.slug}
+              data-cms-item-title={event.title}
             >
               {/* 1:1 Event photo */}
               {event.image ? (

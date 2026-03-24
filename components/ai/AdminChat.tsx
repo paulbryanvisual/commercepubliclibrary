@@ -845,6 +845,19 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
     return () => window.removeEventListener("keydown", handler as unknown as EventListener);
   }, []);
 
+  /* Listen for cms-quick-edit events from the InlineEditorOverlay */
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { message?: string } | undefined;
+      if (detail?.message) {
+        setInput(detail.message);
+        setTimeout(() => textareaRef.current?.focus(), 50);
+      }
+    };
+    window.addEventListener("cms-quick-edit", handler);
+    return () => window.removeEventListener("cms-quick-edit", handler);
+  }, []);
+
   /* Save conversation to Supabase (debounced) */
   const saveConversation = useCallback(
     (conv: Conversation) => {

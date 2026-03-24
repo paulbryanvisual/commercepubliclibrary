@@ -267,6 +267,10 @@ export default async function HomePage({
           {activeAnnouncements.map((a) => (
             <div
               key={a.id}
+              data-cms-item="true"
+              data-cms-item-type="announcement"
+              data-cms-item-id={a.id}
+              data-cms-item-title={a.title}
               className={`rounded-xl p-4 mb-2 flex items-start gap-3 ${
                 a.type === "alert" ? "bg-red-50 border border-red-200 text-red-800" :
                 a.type === "closure" ? "bg-amber-50 border border-amber-200 text-amber-800" :
@@ -460,9 +464,15 @@ export default async function HomePage({
               const cover = "staffName" in pick ? (pick.imageUrl || `https://covers.openlibrary.org/b/isbn/${pick.isbn}-M.jpg`) : (pick as typeof staffPicks[0]).cover;
               const isDraft = "status" in pick && pick.status === "draft";
 
+              const pickId = "id" in pick ? String(pick.id) : String(i);
+
               return (
                 <div
                   key={i}
+                  data-cms-item="true"
+                  data-cms-item-type="staff-pick"
+                  data-cms-item-id={pickId}
+                  data-cms-item-title={title}
                   className={`group rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10 p-5 hover:bg-white/15 hover:border-white/20 transition-all ${isDraft && isPreview ? "ring-2 ring-amber-400 ring-dashed" : ""}`}
                 >
                   {isDraft && isPreview && (
