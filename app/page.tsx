@@ -121,6 +121,7 @@ export default async function HomePage({
   // CMS-controlled colors — accepts any valid CSS color or gradient string
   const heroBgColor = cmsPageContent.hero_bg_color || null;       // e.g. "#556B2F" or "linear-gradient(...)"
   const heroAccentColor = cmsPageContent.hero_accent_color || null; // e.g. "#9DC183" (subtitle / chip color)
+  const statsCardPosition = cmsPageContent.stats_card_position || null; // e.g. "translateY(-200px) translateX(10px)"
 
   // Use CMS staff picks if any exist, otherwise use defaults
   const cmsStaffPicks = cms.staffPicks.length > 0 ? cms.staffPicks : null;
@@ -226,7 +227,7 @@ export default async function HomePage({
                 )}
               </div>
               {/* Floating card overlay */}
-              <div className="absolute -bottom-4 -left-8 rounded-xl bg-white p-4 shadow-lg border border-gray-100 animate-fade-in">
+              <div className="absolute -bottom-4 -left-8 rounded-xl bg-white p-4 shadow-lg border border-gray-100 animate-fade-in" style={statsCardPosition ? { transform: statsCardPosition } : undefined}>
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-primary-light flex items-center justify-center">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
