@@ -125,6 +125,24 @@ export default async function HomePage({
   const rawStatsPos = cmsPageContent.stats_card_position || null;
   const statsCardPosition = rawStatsPos ? rawStatsPos.replace(/^transform:\s*/i, "").trim() : null;
 
+  // Search bar
+  const searchPlaceholder = cmsPageContent.search_placeholder || "Search books, events, services...";
+  const searchButtonText = cmsPageContent.search_button_text || "Search";
+
+  // Section headings
+  const eventsLabel = cmsPageContent.events_label || "WHAT'S HAPPENING";
+  const eventsHeading = cmsPageContent.events_heading || "Upcoming Events";
+  const newArrivalsLabel = cmsPageContent.new_arrivals_label || "Just Added";
+  const newArrivalsHeading = cmsPageContent.new_arrivals_heading || "New Arrivals";
+  const digitalLabel = cmsPageContent.digital_label || "Read Anywhere";
+  const digitalHeading = cmsPageContent.digital_heading || "Digital Resources";
+  const staffPicksLabel = cmsPageContent.staff_picks_label || "Recommended";
+  const staffPicksHeading = cmsPageContent.staff_picks_heading || "Staff Picks";
+
+  // Section colors
+  const statsStripBg = cmsPageContent.stats_strip_bg || null;
+  const staffPicksBg = cmsPageContent.staff_picks_bg || null;
+
   // Use CMS staff picks if any exist, otherwise use defaults
   const cmsStaffPicks = cms.staffPicks.length > 0 ? cms.staffPicks : null;
 
@@ -186,13 +204,13 @@ export default async function HomePage({
                   </svg>
                   <input
                     type="text"
-                    placeholder="Search books, events, services..."
+                    placeholder={searchPlaceholder}
                     className="w-full bg-transparent py-2.5 text-sm text-gray-700 placeholder-gray-400 outline-none"
                     aria-label="Search the library"
                   />
                 </div>
-                <button className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-mid transition-colors shadow-sm">
-                  Search
+                <button className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-mid transition-colors shadow-sm" suppressHydrationWarning>
+                  {searchButtonText}
                 </button>
               </div>
 
@@ -332,12 +350,12 @@ export default async function HomePage({
 
       {/* ─── UPCOMING EVENTS CAROUSEL ─── */}
       <div className="mt-16">
-        <EventsCarousel />
+        <EventsCarousel label={eventsLabel} heading={eventsHeading} />
       </div>
 
       {/* ─── STATS STRIP ─── */}
       <section className="mx-auto max-w-site px-4 md:px-8 mt-16">
-        <div className="rounded-2xl bg-gradient-to-r from-primary-dark via-primary-mid to-primary overflow-hidden">
+        <div className={`rounded-2xl overflow-hidden ${!statsStripBg ? "bg-gradient-to-r from-primary-dark via-primary-mid to-primary" : ""}`} style={statsStripBg ? { background: statsStripBg } : undefined}>
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/10">
             {stats.map((stat) => (
               <div key={stat.label} className="p-6 md:p-8 text-center">
@@ -355,10 +373,10 @@ export default async function HomePage({
       <section className="mx-auto max-w-site px-4 md:px-8 mt-16">
         <div className="flex items-end justify-between mb-6">
           <div>
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">
-              Just Added
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1" data-cms-editable="true" data-cms-page="home" data-cms-section="new_arrivals_label" suppressHydrationWarning>
+              {newArrivalsLabel}
             </p>
-            <h2 className="text-h2 text-gray-800">New Arrivals</h2>
+            <h2 className="text-h2 text-gray-800" data-cms-editable="true" data-cms-page="home" data-cms-section="new_arrivals_heading" suppressHydrationWarning>{newArrivalsHeading}</h2>
           </div>
           <Link
             href="/catalog?filter=new"
@@ -413,10 +431,10 @@ export default async function HomePage({
       {/* ─── DIGITAL RESOURCES ─── */}
       <section className="mx-auto max-w-site px-4 md:px-8 mt-16">
         <div className="mb-6">
-          <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">
-            Read Anywhere
+          <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1" data-cms-editable="true" data-cms-page="home" data-cms-section="digital_label" suppressHydrationWarning>
+            {digitalLabel}
           </p>
-          <h2 className="text-h2 text-gray-800">Digital Resources</h2>
+          <h2 className="text-h2 text-gray-800" data-cms-editable="true" data-cms-page="home" data-cms-section="digital_heading" suppressHydrationWarning>{digitalHeading}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {digitalResources.map((resource) => (
@@ -444,14 +462,15 @@ export default async function HomePage({
       </section>
 
       {/* ─── STAFF PICKS ─── */}
-      <section className="mt-16 py-16 bg-gradient-to-br from-primary-dark via-primary-700 to-primary-mid relative overflow-hidden">
+      <section className="mt-16 py-16 relative overflow-hidden" style={staffPicksBg ? { background: staffPicksBg } : undefined}>
+        {!staffPicksBg && <div className="absolute inset-0 bg-gradient-to-br from-primary-dark via-primary-700 to-primary-mid" />}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(93,202,165,0.15),transparent_50%)]" />
         <div className="relative mx-auto max-w-site px-4 md:px-8">
           <div className="mb-8">
-            <p className="text-xs font-semibold text-primary-200 uppercase tracking-widest mb-1">
-              Recommended
+            <p className="text-xs font-semibold text-primary-200 uppercase tracking-widest mb-1" data-cms-editable="true" data-cms-page="home" data-cms-section="staff_picks_label" suppressHydrationWarning>
+              {staffPicksLabel}
             </p>
-            <h2 className="text-h2 text-white">Staff Picks</h2>
+            <h2 className="text-h2 text-white" data-cms-editable="true" data-cms-page="home" data-cms-section="staff_picks_heading" suppressHydrationWarning>{staffPicksHeading}</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {(cmsStaffPicks || staffPicks).map((pick, i) => {
