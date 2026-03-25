@@ -580,7 +580,7 @@ export async function publishItem(
 
 /** Publish all drafts across all tables. */
 export async function publishAllDrafts(): Promise<{ count: number }> {
-  const tables = ["events", "announcements", "staff_picks", "closures", "hours_overrides", "page_content"];
+  const tables = ["events", "announcements", "staff_picks", "closures", "hours_overrides"];
   let count = 0;
 
   for (const table of tables) {
@@ -591,6 +591,27 @@ export async function publishAllDrafts(): Promise<{ count: number }> {
       .select("id");
 
     count += (data || []).length;
+  }
+
+  // page_content uses draft_content column instead of status = "draft"
+  const { data: drafts } = await supabase
+    .from("page_content")
+    .select("id, draft_content")
+    .not("draft_content", "is", null);
+
+  if (drafts && drafts.length > 0) {
+    for (const row of drafts) {
+      const { error } = await supabase
+        .from("page_content")
+        .update({
+          content: row.draft_content,
+          draft_content: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id);
+      if (error) throw new Error(error.message);
+    }
+    count += drafts.length;
   }
 
   return { count };

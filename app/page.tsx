@@ -5,50 +5,19 @@ import StatusPill from "@/components/ui/StatusPill";
 import HeroIllustration from "@/components/ui/HeroIllustration";
 import EventsCarousel from "@/components/events/EventsCarousel";
 import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
+import { CmsIcon } from "@/lib/icons";
 
 // No caching — always fetch fresh CMS data (preview must be instant)
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// ─── Quick actions ───
+// ─── Quick actions (defaults — overridden by CMS) ───
 
-const quickActions = [
-  {
-    title: "My Account",
-    description: "Checkouts, holds & fines",
-    href: "/account",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-    ),
-    gradient: "from-primary/10 to-primary/5",
-  },
-  {
-    title: "Get a Card",
-    description: "Free — apply in 2 minutes",
-    href: "/get-card",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-    ),
-    gradient: "from-blue/10 to-blue/5",
-  },
-  {
-    title: "Book a Room",
-    description: "Free meeting space",
-    href: "/services/rooms",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    ),
-    gradient: "from-purple/10 to-purple/5",
-  },
-  {
-    title: "Passports",
-    description: "Book an appointment",
-    href: "/services/passport",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="12" cy="11" r="3"/><path d="M7 21v-1a5 5 0 0 1 10 0v1"/></svg>
-    ),
-    gradient: "from-amber/10 to-amber/5",
-  },
+const DEFAULT_QUICK_ACTIONS = [
+  { title: "My Account", description: "Checkouts, holds & fines", href: "/account", iconName: "user", gradient: "from-primary/10 to-primary/5" },
+  { title: "Get a Card", description: "Free — apply in 2 minutes", href: "/get-card", iconName: "card", gradient: "from-blue/10 to-blue/5" },
+  { title: "Book a Room", description: "Free meeting space", href: "/services/rooms", iconName: "home", gradient: "from-purple/10 to-purple/5" },
+  { title: "Passports", description: "Book an appointment", href: "/services/passport", iconName: "passport", gradient: "from-amber/10 to-amber/5" },
 ];
 
 // ─── Digital resources ───
@@ -142,6 +111,18 @@ export default async function HomePage({
   // Section colors
   const statsStripBg = cmsPageContent.stats_strip_bg || null;
   const staffPicksBg = cmsPageContent.staff_picks_bg || null;
+
+  // Quick actions — merge CMS overrides with defaults
+  const quickActions = DEFAULT_QUICK_ACTIONS.map((def, i) => {
+    const n = i + 1;
+    return {
+      title: cmsPageContent[`quick_action_${n}_title`] || def.title,
+      description: cmsPageContent[`quick_action_${n}_description`] || def.description,
+      href: cmsPageContent[`quick_action_${n}_href`] || def.href,
+      iconName: cmsPageContent[`quick_action_${n}_icon`] || def.iconName,
+      gradient: def.gradient,
+    };
+  });
 
   // Use CMS staff picks if any exist, otherwise use defaults
   const cmsStaffPicks = cms.staffPicks.length > 0 ? cms.staffPicks : null;
@@ -317,13 +298,13 @@ export default async function HomePage({
               className={`group relative flex flex-col items-center gap-2.5 rounded-2xl border border-gray-200/80 bg-gradient-to-br ${action.gradient} p-5 md:p-6 text-center shadow-sm hover:shadow-lg hover:border-primary-border hover:-translate-y-0.5 transition-all duration-300`}
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-primary shadow-sm group-hover:shadow-md group-hover:scale-105 transition-all">
-                {action.icon}
+                <CmsIcon name={action.iconName} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-800">
+                <h3 className="text-sm font-semibold text-gray-800" suppressHydrationWarning>
                   {action.title}
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">
+                <p className="text-xs text-gray-500 mt-0.5 hidden sm:block" suppressHydrationWarning>
                   {action.description}
                 </p>
               </div>

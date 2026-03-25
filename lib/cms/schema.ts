@@ -44,6 +44,24 @@ const cmsSchema: CMSField[] = [
   { page: "home",   section: "staff_picks_label",          label: "Staff Picks Label",     type: "text",     group: "Headings", default: "Recommended" },
   { page: "home",   section: "staff_picks_heading",        label: "Staff Picks Heading",   type: "text",     group: "Headings", default: "Staff Picks" },
 
+  // ─── Home — Quick Actions (4 cards below hero) ───
+  { page: "home",   section: "quick_action_1_title",       label: "Action 1 Title",        type: "text",     group: "Quick Actions", default: "My Account" },
+  { page: "home",   section: "quick_action_1_description", label: "Action 1 Desc",         type: "text",     group: "Quick Actions", default: "Checkouts, holds & fines" },
+  { page: "home",   section: "quick_action_1_icon",        label: "Action 1 Icon",         type: "text",     group: "Quick Actions", default: "user" },
+  { page: "home",   section: "quick_action_1_href",        label: "Action 1 Link",         type: "url",      group: "Quick Actions", default: "/account" },
+  { page: "home",   section: "quick_action_2_title",       label: "Action 2 Title",        type: "text",     group: "Quick Actions", default: "Get a Card" },
+  { page: "home",   section: "quick_action_2_description", label: "Action 2 Desc",         type: "text",     group: "Quick Actions", default: "Free — apply in 2 minutes" },
+  { page: "home",   section: "quick_action_2_icon",        label: "Action 2 Icon",         type: "text",     group: "Quick Actions", default: "card" },
+  { page: "home",   section: "quick_action_2_href",        label: "Action 2 Link",         type: "url",      group: "Quick Actions", default: "/get-card" },
+  { page: "home",   section: "quick_action_3_title",       label: "Action 3 Title",        type: "text",     group: "Quick Actions", default: "Book a Room" },
+  { page: "home",   section: "quick_action_3_description", label: "Action 3 Desc",         type: "text",     group: "Quick Actions", default: "Free meeting space" },
+  { page: "home",   section: "quick_action_3_icon",        label: "Action 3 Icon",         type: "text",     group: "Quick Actions", default: "home" },
+  { page: "home",   section: "quick_action_3_href",        label: "Action 3 Link",         type: "url",      group: "Quick Actions", default: "/services/rooms" },
+  { page: "home",   section: "quick_action_4_title",       label: "Action 4 Title",        type: "text",     group: "Quick Actions", default: "Passports" },
+  { page: "home",   section: "quick_action_4_description", label: "Action 4 Desc",         type: "text",     group: "Quick Actions", default: "Book an appointment" },
+  { page: "home",   section: "quick_action_4_icon",        label: "Action 4 Icon",         type: "text",     group: "Quick Actions", default: "passport" },
+  { page: "home",   section: "quick_action_4_href",        label: "Action 4 Link",         type: "url",      group: "Quick Actions", default: "/services/passport" },
+
   // ─── Home — Layout / CSS ───
   { page: "home",   section: "stats_card_position",        label: "Stats Card Pos",        type: "css",      group: "Layout" },
 ];
@@ -65,6 +83,15 @@ export function getFieldsForPage(page: string): CMSField[] {
   return cmsSchema.filter((f) => f.page === page);
 }
 
+/** Available icon names for quick actions — imported dynamically to avoid circular deps */
+export const AVAILABLE_ICONS = [
+  "user", "users", "card", "passport", "id-card", "home", "building", "map-pin",
+  "book", "book-open", "airplane", "car", "globe", "calendar", "clock",
+  "phone", "mail", "message-circle", "wifi", "printer", "computer",
+  "music", "film", "headphones", "camera", "search", "star", "heart",
+  "key", "gift", "thumbs-up", "coffee", "palette", "baby", "graduation", "puzzle",
+];
+
 /** Helper: generate a summary for the AI system prompt */
 export function getSchemaForPrompt(): string {
   const groups: Record<string, CMSField[]> = {};
@@ -82,5 +109,9 @@ export function getSchemaForPrompt(): string {
       lines.push(`    - section="${f.section}" → ${f.type}${def} — ${f.label}`);
     }
   }
+  // Add available icon names
+  lines.push("");
+  lines.push(`  ICON NAMES for quick_action_N_icon: ${AVAILABLE_ICONS.join(", ")}`);
+
   return lines.join("\n");
 }
