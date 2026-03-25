@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { getField } from "@/lib/cms/schema";
 
 interface ActiveEdit {
   el: HTMLElement;
   page: string;
   section: string;
   original: string;
+  fieldType: "text" | "richtext" | "color" | "gradient" | "image" | "css" | "url";
 }
 
 interface SaveState {
@@ -30,6 +32,7 @@ export default function InlineEditorOverlay() {
   const [activeEdit, setActiveEdit] = useState<ActiveEdit | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
   const [toolbarPos, setToolbarPos] = useState({ top: 0, left: 0 });
+  const [colorValue, setColorValue] = useState("#000000"); // for color-type fields
   const toolbarRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<MutationObserver | null>(null);
 
@@ -86,22 +89,28 @@ export default function InlineEditorOverlay() {
     const page = el.dataset.cmsPage || "";
     const section = el.dataset.cmsSection || "";
     const original = el.innerText;
+    const schemaField = getField(page, section);
+    const fieldType = schemaField?.type || "text";
 
-    el.contentEditable = "true";
-    el.spellcheck = true;
+    // For color/gradient fields, don't make contenteditable — show color picker in toolbar
+    if (fieldType !== "color" && fieldType !== "gradient") {
+      el.contentEditable = "true";
+      el.spellcheck = true;
+      el.focus();
+
+      // Move caret to end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+
     el.classList.remove("cms-editable-hover");
     el.classList.add("cms-editable-active");
-    el.focus();
 
-    // Move caret to end
-    const range = document.createRange();
-    const sel = window.getSelection();
-    range.selectNodeContents(el);
-    range.collapse(false);
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-
-    setActiveEdit({ el, page, section, original });
+    setActiveEdit({ el, page, section, original, fieldType });
     setSaveState({ status: "idle" });
     positionToolbar(el);
   }, [activeEdit]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -136,7 +145,8 @@ export default function InlineEditorOverlay() {
   /* ── Save to draft via execute API ── */
   const saveDraft = useCallback(async (): Promise<{ table: string; id: string } | null> => {
     if (!activeEdit) return null;
-    const content = activeEdit.el.innerText.trim();
+    const isColor = activeEdit.fieldType === "color" || activeEdit.fieldType === "gradient";
+    const content = isColor ? colorValue : activeEdit.el.innerText.trim();
     if (!content) return null;
 
     setSaveState({ status: "saving" });
@@ -159,7 +169,7 @@ export default function InlineEditorOverlay() {
       setSaveState({ status: "error", message: msg });
       return null;
     }
-  }, [activeEdit]);
+  }, [activeEdit, colorValue]);
 
   /* ── Handle Save Draft ── */
   const handleSaveDraft = useCallback(async () => {
@@ -264,6 +274,31 @@ export default function InlineEditorOverlay() {
         {activeEdit.section.replace(/_/g, " ")}
       </span>
       <div className="w-px h-4 bg-gray-200" />
+
+      {/* Color picker for color/gradient fields */}
+      {(activeEdit.fieldType === "color" || activeEdit.fieldType === "gradient") && (
+        <div className="flex items-center gap-1.5 mr-1">
+          <label className="relative cursor-pointer">
+            <span
+              className="block w-7 h-7 rounded-lg border-2 border-gray-200 shadow-sm"
+              style={{ background: colorValue }}
+            />
+            <input
+              type="color"
+              value={colorValue}
+              onChange={(e) => setColorValue(e.target.value)}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
+          </label>
+          <input
+            type="text"
+            value={colorValue}
+            onChange={(e) => setColorValue(e.target.value)}
+            className="w-20 text-[10px] font-mono bg-white border border-gray-200 rounded px-1.5 py-1 text-gray-600 focus:outline-none focus:border-purple"
+            placeholder="#hex or gradient"
+          />
+        </div>
+      )}
 
       {/* Save draft */}
       <button
