@@ -27,7 +27,7 @@ export default function AdminPreviewShell() {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [checked, setChecked] = useState(false);
   const [panelPosition, setPanelPosition] = useState<PanelPosition>("left");
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(true);
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
