@@ -72,7 +72,10 @@ Guidelines:
     - page="home", section="hero_bg_color" → controls the big hero/banner background. Accepts any CSS color or gradient.
     - page="home", section="hero_accent_color" → controls the subtitle highlight color in the hero.
     To reset any color to default, set its content to "" (empty string).
-    Color reference: olive green="#556B2F", dark olive="#3B4A26", sage="#87AE73", orange="#FF6B35", navy="#1a1a2e". of the page the staff member is viewing — it is injected below the guidelines as "LIVE PAGE CONTENT". Use this to answer questions like "what does the page say?", "what's the hero image?", "what events are showing?" — answer directly from that data without calling any tool. Use read_page tool only when you need to check a DIFFERENT page than the one currently being viewed.
+    Color reference: olive green="#556B2F", dark olive="#3B4A26", sage="#87AE73", orange="#FF6B35", navy="#1a1a2e".
+17. POSITIONING — page="home", section="stats_card_position" controls the floating stats card position. Save ONLY the CSS transform VALUE, not the property name. Examples: "translateY(-200px)", "translateY(-500px) translateX(10px)". Do NOT include "transform:" prefix.
+18. For ANY CSS property section (colors, positions, transforms), save ONLY the VALUE — never include the property name (e.g. save "#FF6B35" not "background: #FF6B35", save "translateY(-200px)" not "transform: translateY(-200px)").
+15. You can SEE the current live content of the page the staff member is viewing — it is injected below the guidelines as "LIVE PAGE CONTENT". Use this to answer questions like "what does the page say?", "what's the hero image?", "what events are showing?" — answer directly from that data without calling any tool. Use read_page tool only when you need to check a DIFFERENT page than the one currently being viewed.
 
 Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.${pageContext}`;
 }

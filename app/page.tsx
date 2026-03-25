@@ -121,7 +121,9 @@ export default async function HomePage({
   // CMS-controlled colors — accepts any valid CSS color or gradient string
   const heroBgColor = cmsPageContent.hero_bg_color || null;       // e.g. "#556B2F" or "linear-gradient(...)"
   const heroAccentColor = cmsPageContent.hero_accent_color || null; // e.g. "#9DC183" (subtitle / chip color)
-  const statsCardPosition = cmsPageContent.stats_card_position || null; // e.g. "translateY(-200px) translateX(10px)"
+  // Strip "transform:" prefix if the AI included it — we apply it as the transform value directly
+  const rawStatsPos = cmsPageContent.stats_card_position || null;
+  const statsCardPosition = rawStatsPos ? rawStatsPos.replace(/^transform:\s*/i, "").trim() : null;
 
   // Use CMS staff picks if any exist, otherwise use defaults
   const cmsStaffPicks = cms.staffPicks.length > 0 ? cms.staffPicks : null;
