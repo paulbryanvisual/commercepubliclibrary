@@ -180,6 +180,7 @@ interface AttachedFile {
 interface AdminChatProps {
   userId: string;
   userName: string;
+  userRole?: "admin" | "editor";
   currentPage?: string;
   position?: "left" | "bottom";
 }
@@ -734,7 +735,7 @@ function TypingIndicator() {
 }
 
 /* ── Main component ── */
-export default function AdminChat({ userId: _userId, userName, currentPage, position = "left" }: AdminChatProps) {
+export default function AdminChat({ userId: _userId, userName, userRole = "editor", currentPage, position = "left" }: AdminChatProps) {
   const isBottom = position === "bottom";
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -1012,6 +1013,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             images,
             currentPage: previewPage,
             model: selectedModel,
+            role: userRole,
           }),
         });
 
