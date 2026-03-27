@@ -6,7 +6,7 @@
  * This stateless approach works well in serverless (Vercel).
  */
 
-import * as net from "net";
+import net from "net";
 import type {
   SIP2Config,
   PatronStatus,
