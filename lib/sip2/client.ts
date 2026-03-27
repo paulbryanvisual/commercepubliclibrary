@@ -47,29 +47,25 @@ function timestamp(): string {
   return d.toISOString().replace(/[-T:Z]/g, "").slice(0, 18);
 }
 
-/** Send a raw SIP2 message and receive the response */
-async function sendRaw(msg: string, config: SIP2Config): Promise<string> {
+/** Read one complete SIP2 response (terminated by \r) from the socket */
+function readResponse(socket: net.Socket, timeout: number): Promise<string> {
   return new Promise((resolve, reject) => {
-    const socket = new net.Socket();
     let data = "";
     const timer = setTimeout(() => {
       socket.destroy();
-      reject(new Error("SIP2 connection timed out"));
-    }, config.timeout || 10000);
+      reject(new Error("SIP2 read timed out"));
+    }, timeout);
 
-    socket.connect(config.port, config.host, () => {
-      socket.write(msg + "\r");
-    });
-
-    socket.on("data", (chunk) => {
+    const onData = (chunk: Buffer) => {
       data += chunk.toString();
-      // SIP2 messages end with \r
       if (data.includes("\r")) {
         clearTimeout(timer);
-        socket.end();
+        socket.removeListener("data", onData);
         resolve(data.trim());
       }
-    });
+    };
+
+    socket.on("data", onData);
 
     socket.on("error", (err) => {
       clearTimeout(timer);
@@ -83,21 +79,55 @@ async function sendRaw(msg: string, config: SIP2Config): Promise<string> {
   });
 }
 
-/** Open connection, login (93), send message, return response, close */
+/**
+ * Open ONE connection, login (93), send the actual message, return response, close.
+ * Both login and the command are sent on the SAME socket — many SIP2 servers
+ * require an authenticated session on the same TCP connection.
+ */
 async function sendMessage(msg: string): Promise<string> {
   const config = getConfig();
+  const timeout = config.timeout || 10000;
 
-  // Step 1: Login (message 93)
-  const loginMsg = `9300CN${config.username}|CO${config.password}|CP${config.location}|`;
-  const loginResp = await sendRaw(loginMsg, config);
+  return new Promise((resolve, reject) => {
+    const socket = new net.Socket();
+    const killTimer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("SIP2 connection timed out"));
+    }, timeout * 2);
 
-  if (!loginResp.startsWith("941")) {
-    throw new Error(`SIP2 login failed: ${loginResp}`);
-  }
+    socket.connect(config.port, config.host, async () => {
+      try {
+        // Step 1: Login on this connection
+        const loginMsg = `9300CN${config.username}|CO${config.password}|CP${config.location}|`;
+        socket.write(loginMsg + "\r");
+        const loginResp = await readResponse(socket, timeout);
 
-  // Step 2: Send the actual message on a fresh connection
-  const response = await sendRaw(msg, config);
-  return response;
+        if (!loginResp.startsWith("941")) {
+          clearTimeout(killTimer);
+          socket.end();
+          reject(new Error(`SIP2 login failed: ${loginResp}`));
+          return;
+        }
+
+        // Step 2: Send the actual command on the SAME connection
+        socket.write(msg + "\r");
+        const response = await readResponse(socket, timeout);
+
+        clearTimeout(killTimer);
+        socket.end();
+        resolve(response);
+      } catch (err) {
+        clearTimeout(killTimer);
+        socket.destroy();
+        reject(err);
+      }
+    });
+
+    socket.on("error", (err) => {
+      clearTimeout(killTimer);
+      reject(err);
+    });
+  });
 }
 
 /* ── Variable field parser ── */
