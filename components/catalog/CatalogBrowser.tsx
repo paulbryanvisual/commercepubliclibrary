@@ -9,6 +9,7 @@ import {
   type Book,
   type Genre,
 } from "@/lib/catalog/books";
+import { usePatron } from "@/components/patron/PatronContext";
 
 // ---------- Genre Filter Pills ----------
 function GenreFilter({
@@ -151,8 +152,37 @@ function BookDetailPanel({
   onSelectBook: (book: Book) => void;
 }) {
   const [imgError, setImgError] = useState(false);
+  const [holdStatus, setHoldStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [holdMessage, setHoldMessage] = useState("");
+  const { patron, setShowLoginModal } = usePatron();
   const panelRef = useRef<HTMLDivElement>(null);
   const related = getRelatedBooks(book);
+
+  const handlePlaceHold = async () => {
+    if (!patron) {
+      setShowLoginModal(true);
+      return;
+    }
+    setHoldStatus("loading");
+    try {
+      const res = await fetch("/api/patron/hold", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: book.isbn }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setHoldStatus("success");
+        setHoldMessage(data.message || "Hold placed!");
+      } else {
+        setHoldStatus("error");
+        setHoldMessage(data.message || data.error || "Could not place hold");
+      }
+    } catch {
+      setHoldStatus("error");
+      setHoldMessage("Unable to connect to library system");
+    }
+  };
 
   // Close on Escape
   useEffect(() => {
@@ -272,10 +302,42 @@ function BookDetailPanel({
             ))}
           </div>
 
+          {/* Hold status message */}
+          {holdMessage && (
+            <div className={`mt-4 rounded-lg p-3 text-sm ${
+              holdStatus === "success"
+                ? "bg-green-50 border border-green-200 text-green-700"
+                : "bg-red-50 border border-red-200 text-red-700"
+            }`}>
+              {holdMessage}
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex gap-3 mt-6">
-            <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-medium text-white hover:bg-primary-mid transition-colors">
-              Place Hold
+            <button
+              onClick={handlePlaceHold}
+              disabled={holdStatus === "loading" || holdStatus === "success"}
+              className="flex-1 rounded-xl bg-primary py-3 text-sm font-medium text-white hover:bg-primary-mid transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {holdStatus === "loading" ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Placing Hold...
+                </>
+              ) : holdStatus === "success" ? (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  Hold Placed!
+                </>
+              ) : (
+                patron ? "Place Hold" : "Sign In to Place Hold"
+              )}
             </button>
             <button className="flex-1 rounded-xl border border-blue-200 bg-blue-light py-3 text-sm font-medium text-blue hover:bg-blue-100 transition-colors">
               Borrow on Libby

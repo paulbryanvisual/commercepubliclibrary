@@ -5,6 +5,8 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { Suspense } from "react";
 import AdminPreviewShell from "@/components/admin/AdminPreviewShell";
+import { PatronProvider } from "@/components/patron/PatronContext";
+import PatronLoginModal from "@/components/patron/PatronLoginModal";
 import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
 import { cookies } from "next/headers";
 
@@ -62,15 +64,18 @@ export default async function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="font-sans text-gray-text bg-background antialiased">
-        <a href="#main-content" className="skip-to-content">
-          Skip to main content
-        </a>
-        <Header bgColor={headerBgColor} />
-        <main id="main-content" role="main">
-          {children}
-        </main>
-        <Footer />
-        <Suspense><AdminPreviewShell /></Suspense>
+        <PatronProvider>
+          <a href="#main-content" className="skip-to-content">
+            Skip to main content
+          </a>
+          <Header bgColor={headerBgColor} />
+          <main id="main-content" role="main">
+            {children}
+          </main>
+          <Footer />
+          <PatronLoginModal />
+          <Suspense><AdminPreviewShell /></Suspense>
+        </PatronProvider>
       </body>
     </html>
   );

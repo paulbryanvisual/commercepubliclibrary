@@ -4,6 +4,7 @@ import { LIBRARY_HOURS } from "@/lib/hours";
 import StatusPill from "@/components/ui/StatusPill";
 import HeroIllustration from "@/components/ui/HeroIllustration";
 import EventsCarousel from "@/components/events/EventsCarousel";
+import HeroSearchBar from "@/components/search/HeroSearchBar";
 import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
 import { CmsIcon } from "@/lib/icons";
 
@@ -177,23 +178,8 @@ export default async function HomePage({
                 {heroDescription || "Free books, ebooks, events, passport services, and more — for everyone in Hunt County."}
               </p>
 
-              {/* Search bar */}
-              <div className="flex items-center rounded-2xl bg-white p-1.5 shadow-xl shadow-black/10 max-w-xl ring-1 ring-white/20">
-                <div className="flex-1 flex items-center gap-2.5 px-4">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#73726c" strokeWidth="2" aria-hidden="true">
-                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder={searchPlaceholder}
-                    className="w-full bg-transparent py-2.5 text-sm text-gray-700 placeholder-gray-400 outline-none"
-                    aria-label="Search the library"
-                  />
-                </div>
-                <button className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-mid transition-colors shadow-sm" suppressHydrationWarning>
-                  {searchButtonText}
-                </button>
-              </div>
+              {/* Search bar — live autocomplete from Atriuum catalog */}
+              <HeroSearchBar placeholder={searchPlaceholder} buttonText={searchButtonText} />
 
               {/* Quick chips */}
               <div className="flex flex-wrap gap-2 mt-5">
