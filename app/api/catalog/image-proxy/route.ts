@@ -18,7 +18,7 @@ const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 function pruneCache() {
   if (memoryCache.size <= MAX_CACHE_SIZE) return;
   // Remove oldest entries
-  const entries = [...memoryCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+  const entries = Array.from(memoryCache.entries()).sort((a, b) => a[1].timestamp - b[1].timestamp);
   const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE);
   for (const [key] of toRemove) {
     memoryCache.delete(key);
