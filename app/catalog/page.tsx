@@ -5,6 +5,9 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import CatalogBrowser from "@/components/catalog/CatalogBrowser";
 import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
+import GenreDiscovery from "@/components/catalog/GenreDiscovery";
+import BookQuiz from "@/components/catalog/BookQuiz";
+import { books, type Book, type Genre } from "@/lib/catalog/books";
 
 interface SearchResult {
   key?: string;
@@ -126,7 +129,29 @@ function CatalogContent() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
+  const [browseGenre, setBrowseGenre] = useState<Genre | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleLocalBookClick = useCallback((book: Book) => {
+    setSelectedBook({
+      title: book.title,
+      author: book.author,
+      year: book.year,
+      isbn: book.isbn,
+      coverUrl: book.coverUrl,
+      subjects: book.subjects,
+      description: book.description,
+      genre: book.genre,
+    });
+  }, []);
+
+  const handleGenreSelect = useCallback((genre: Genre) => {
+    setBrowseGenre(genre);
+    // Scroll to the genre section
+    setTimeout(() => {
+      document.getElementById("genre-books")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  }, []);
 
   const handleBookClick = useCallback((result: SearchResult) => {
     setSelectedBook({
@@ -320,15 +345,53 @@ function CatalogContent() {
             )}
           </div>
         ) : (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-h2 text-gray-800">Browse Collection</h2>
-              <span className="text-sm text-gray-400">30 titles</span>
+          <div className="space-y-10">
+            {/* Book Quiz */}
+            <BookQuiz onSelectBook={handleLocalBookClick} />
+
+            {/* Genre Discovery Tiles */}
+            <div>
+              <h2 className="text-h2 text-gray-800 mb-2">Explore by Genre</h2>
+              <p className="text-gray-500 mb-6">Tap a genre to discover books you&apos;ll love.</p>
+              <GenreDiscovery onSelectGenre={handleGenreSelect} onSelectBook={handleLocalBookClick} />
             </div>
-            <p className="text-gray-500 mb-6">
-              Click any cover to see details, find similar books, or place a hold.
-            </p>
-            <CatalogBrowser />
+
+            {/* Genre filtered view or full browse */}
+            <div id="genre-books">
+              {browseGenre ? (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-h2 text-gray-800">{browseGenre}</h2>
+                      <span className="text-sm text-gray-400">
+                        {books.filter((b) => b.genre === browseGenre).length} titles
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setBrowseGenre(null)}
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M15 18l-6-6 6-6" />
+                      </svg>
+                      All Genres
+                    </button>
+                  </div>
+                  <CatalogBrowser initialGenre={browseGenre} />
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-h2 text-gray-800">Full Collection</h2>
+                    <span className="text-sm text-gray-400">30 titles</span>
+                  </div>
+                  <p className="text-gray-500 mb-6">
+                    Click any cover to see details, save to your list, or reserve.
+                  </p>
+                  <CatalogBrowser />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -116,8 +116,8 @@ function toBookInfo(book: Book): BookInfo {
 }
 
 // ---------- Main CatalogBrowser ----------
-export default function CatalogBrowser() {
-  const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
+export default function CatalogBrowser({ initialGenre }: { initialGenre?: Genre } = {}) {
+  const [selectedGenre, setSelectedGenre] = useState<Genre | null>(initialGenre || null);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
 
   const filteredBooks = selectedGenre
@@ -137,7 +137,7 @@ export default function CatalogBrowser() {
 
   return (
     <section>
-      <GenreFilter selected={selectedGenre} onSelect={setSelectedGenre} />
+      {!initialGenre && <GenreFilter selected={selectedGenre} onSelect={setSelectedGenre} />}
 
       {/* Book grid */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-5">
