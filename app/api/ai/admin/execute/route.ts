@@ -88,6 +88,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Role-based access control — editors can only use CMS tools
+  const EDITOR_ALLOWED_TOOLS = new Set([
+    "update_page_content", "create_event", "update_event", "delete_event",
+    "create_announcement", "delete_announcement", "create_staff_pick",
+    "add_closure", "delete_closure", "update_hours",
+    "search_images", "generate_image", "upload_image", "read_page",
+  ]);
+  const userRole = session.role || "editor";
+  if (userRole !== "admin" && !EDITOR_ALLOWED_TOOLS.has(toolName)) {
+    return NextResponse.json(
+      { error: "This action requires admin access. Please contact an admin (Paul or Ashley)." },
+      { status: 403 }
+    );
+  }
+
   try {
     let result: unknown;
     let action = "unknown";

@@ -4,7 +4,7 @@ import { useRef, useState, useEffect } from "react";
 import Link from "next/link";
 import { audienceConfig, type LibraryEvent, type Audience } from "@/lib/events";
 
-export default function EventsCarousel() {
+export default function EventsCarousel({ label, heading }: { label?: string; heading?: string } = {}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [events, setEvents] = useState<LibraryEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,10 +48,10 @@ export default function EventsCarousel() {
       <div className="mx-auto max-w-site px-4 md:px-8">
         <div className="flex items-end justify-between mb-6">
           <div>
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">
-              What&apos;s Happening
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1" suppressHydrationWarning>
+              {label || "What\u2019s Happening"}
             </p>
-            <h2 className="text-h2 text-gray-800">Upcoming Events</h2>
+            <h2 className="text-h2 text-gray-800" suppressHydrationWarning>{heading || "Upcoming Events"}</h2>
           </div>
           <div className="flex items-center gap-2">
             <button

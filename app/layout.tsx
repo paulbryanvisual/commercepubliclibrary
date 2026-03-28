@@ -5,7 +5,10 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { Suspense } from "react";
 import AdminPreviewShell from "@/components/admin/AdminPreviewShell";
-import { getPublishedData } from "@/lib/cms/dataStore";
+import { PatronProvider } from "@/components/patron/PatronContext";
+import PatronLoginModal from "@/components/patron/PatronLoginModal";
+import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
+import { cookies } from "next/headers";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -46,10 +49,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Fetch global CMS settings for site-wide elements like the header color
+  // Fetch global CMS settings for site-wide elements like the header color.
+  // If admin is logged in, use getAllData() so draft colors appear in preview.
   let headerBgColor: string | null = null;
   try {
-    const cms = await getPublishedData();
+    const cookieStore = cookies();
+    const isAdmin = cookieStore.has("cpl_admin_session");
+    const cms = isAdmin ? await getAllData() : await getPublishedData();
     headerBgColor = cms.pageContent?.global?.header_bg_color || null;
   } catch {
     // Non-fatal — fall back to default color
@@ -58,15 +64,18 @@ export default async function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="font-sans text-gray-text bg-background antialiased">
-        <a href="#main-content" className="skip-to-content">
-          Skip to main content
-        </a>
-        <Header bgColor={headerBgColor} />
-        <main id="main-content" role="main">
-          {children}
-        </main>
-        <Footer />
-        <Suspense><AdminPreviewShell /></Suspense>
+        <PatronProvider>
+          <a href="#main-content" className="skip-to-content">
+            Skip to main content
+          </a>
+          <Header bgColor={headerBgColor} />
+          <main id="main-content" role="main">
+            {children}
+          </main>
+          <Footer />
+          <PatronLoginModal />
+          <Suspense><AdminPreviewShell /></Suspense>
+        </PatronProvider>
       </body>
     </html>
   );

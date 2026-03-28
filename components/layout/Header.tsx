@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
 import { navLinks } from "@/lib/siteConfig";
 import Logo from "@/components/ui/Logo";
+import { usePatron } from "@/components/patron/PatronContext";
 
 /**
  * Header with dark green (#114d3e) background.
@@ -18,6 +19,7 @@ export default function Header({ bgColor }: { bgColor?: string | null }) {
   const [servicesOpen, setServicesOpen] = useState(false);
   const [mobileServicesOpen, setMobileServicesOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { patron, setShowLoginModal } = usePatron();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -121,27 +123,40 @@ export default function Header({ bgColor }: { bgColor?: string | null }) {
 
         {/* Header utilities */}
         <div className="flex items-center gap-2">
-          <Link
-            href="/account"
-            className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors"
-            aria-label="My Account"
-          >
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          {patron ? (
+            <Link
+              href="/account"
+              className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+              aria-label="My Account"
             >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            <span className="hidden md:inline text-[13px]">My Account</span>
-          </Link>
+              <div className="h-6 w-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold text-white">
+                {patron.name.charAt(0).toUpperCase()}
+              </div>
+              <span className="hidden md:inline text-[13px]">{patron.name.split(" ")[0]}</span>
+            </Link>
+          ) : (
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="hidden sm:flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+              aria-label="Sign In"
+            >
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              <span className="hidden md:inline text-[13px]">My Account</span>
+            </button>
+          )}
           <Link
             href="/get-card"
             className="hidden sm:inline-flex rounded-lg bg-white px-4 py-2 text-[13px] font-semibold text-[#114d3e] hover:bg-white/90 transition-colors shadow-sm"
@@ -227,13 +242,22 @@ export default function Header({ bgColor }: { bgColor?: string | null }) {
               )
             )}
             <hr className="my-2 border-white/15" />
-            <Link
-              href="/account"
-              className="block rounded-lg px-4 py-3 text-base font-medium text-white/90 hover:bg-white/10 hover:text-white"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              My Account
-            </Link>
+            {patron ? (
+              <Link
+                href="/account"
+                className="block rounded-lg px-4 py-3 text-base font-medium text-white/90 hover:bg-white/10 hover:text-white"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {patron.name.split(" ")[0]}&apos;s Account
+              </Link>
+            ) : (
+              <button
+                className="block w-full text-left rounded-lg px-4 py-3 text-base font-medium text-white/90 hover:bg-white/10 hover:text-white"
+                onClick={() => { setMobileMenuOpen(false); setShowLoginModal(true); }}
+              >
+                Sign In
+              </button>
+            )}
             <Link
               href="/get-card"
               className="block rounded-lg bg-white px-4 py-3 text-center text-base font-semibold text-[#114d3e] hover:bg-white/90"

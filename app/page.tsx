@@ -4,51 +4,21 @@ import { LIBRARY_HOURS } from "@/lib/hours";
 import StatusPill from "@/components/ui/StatusPill";
 import HeroIllustration from "@/components/ui/HeroIllustration";
 import EventsCarousel from "@/components/events/EventsCarousel";
+import HeroSearchBar from "@/components/search/HeroSearchBar";
 import { getPublishedData, getAllData } from "@/lib/cms/dataStore";
+import { CmsIcon } from "@/lib/icons";
 
 // No caching — always fetch fresh CMS data (preview must be instant)
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// ─── Quick actions ───
+// ─── Quick actions (defaults — overridden by CMS) ───
 
-const quickActions = [
-  {
-    title: "My Account",
-    description: "Checkouts, holds & fines",
-    href: "/account",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-    ),
-    gradient: "from-primary/10 to-primary/5",
-  },
-  {
-    title: "Get a Card",
-    description: "Free — apply in 2 minutes",
-    href: "/get-card",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-    ),
-    gradient: "from-blue/10 to-blue/5",
-  },
-  {
-    title: "Book a Room",
-    description: "Free meeting space",
-    href: "/services/rooms",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    ),
-    gradient: "from-purple/10 to-purple/5",
-  },
-  {
-    title: "Passports",
-    description: "Book an appointment",
-    href: "/services/passport",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="12" cy="11" r="3"/><path d="M7 21v-1a5 5 0 0 1 10 0v1"/></svg>
-    ),
-    gradient: "from-amber/10 to-amber/5",
-  },
+const DEFAULT_QUICK_ACTIONS = [
+  { title: "My Account", description: "Checkouts, holds & fines", href: "/account", iconName: "user", gradient: "from-primary/10 to-primary/5" },
+  { title: "Get a Card", description: "Free — apply in 2 minutes", href: "/get-card", iconName: "card", gradient: "from-blue/10 to-blue/5" },
+  { title: "Book a Room", description: "Free meeting space", href: "/services/rooms", iconName: "home", gradient: "from-purple/10 to-purple/5" },
+  { title: "Passports", description: "Book an appointment", href: "/services/passport", iconName: "passport", gradient: "from-amber/10 to-amber/5" },
 ];
 
 // ─── Digital resources ───
@@ -121,6 +91,39 @@ export default async function HomePage({
   // CMS-controlled colors — accepts any valid CSS color or gradient string
   const heroBgColor = cmsPageContent.hero_bg_color || null;       // e.g. "#556B2F" or "linear-gradient(...)"
   const heroAccentColor = cmsPageContent.hero_accent_color || null; // e.g. "#9DC183" (subtitle / chip color)
+  // Strip "transform:" prefix if the AI included it — we apply it as the transform value directly
+  const rawStatsPos = cmsPageContent.stats_card_position || null;
+  const statsCardPosition = rawStatsPos ? rawStatsPos.replace(/^transform:\s*/i, "").trim() : null;
+
+  // Search bar
+  const searchPlaceholder = cmsPageContent.search_placeholder || "Search books, events, services...";
+  const searchButtonText = cmsPageContent.search_button_text || "Search";
+
+  // Section headings
+  const eventsLabel = cmsPageContent.events_label || "WHAT'S HAPPENING";
+  const eventsHeading = cmsPageContent.events_heading || "Upcoming Events";
+  const newArrivalsLabel = cmsPageContent.new_arrivals_label || "Just Added";
+  const newArrivalsHeading = cmsPageContent.new_arrivals_heading || "New Arrivals";
+  const digitalLabel = cmsPageContent.digital_label || "Read Anywhere";
+  const digitalHeading = cmsPageContent.digital_heading || "Digital Resources";
+  const staffPicksLabel = cmsPageContent.staff_picks_label || "Recommended";
+  const staffPicksHeading = cmsPageContent.staff_picks_heading || "Staff Picks";
+
+  // Section colors
+  const statsStripBg = cmsPageContent.stats_strip_bg || null;
+  const staffPicksBg = cmsPageContent.staff_picks_bg || null;
+
+  // Quick actions — merge CMS overrides with defaults
+  const quickActions = DEFAULT_QUICK_ACTIONS.map((def, i) => {
+    const n = i + 1;
+    return {
+      title: cmsPageContent[`quick_action_${n}_title`] || def.title,
+      description: cmsPageContent[`quick_action_${n}_description`] || def.description,
+      href: cmsPageContent[`quick_action_${n}_href`] || def.href,
+      iconName: cmsPageContent[`quick_action_${n}_icon`] || def.iconName,
+      gradient: def.gradient,
+    };
+  });
 
   // Use CMS staff picks if any exist, otherwise use defaults
   const cmsStaffPicks = cms.staffPicks.length > 0 ? cms.staffPicks : null;
@@ -175,23 +178,8 @@ export default async function HomePage({
                 {heroDescription || "Free books, ebooks, events, passport services, and more — for everyone in Hunt County."}
               </p>
 
-              {/* Search bar */}
-              <div className="flex items-center rounded-2xl bg-white p-1.5 shadow-xl shadow-black/10 max-w-xl ring-1 ring-white/20">
-                <div className="flex-1 flex items-center gap-2.5 px-4">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#73726c" strokeWidth="2" aria-hidden="true">
-                    <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search books, events, services..."
-                    className="w-full bg-transparent py-2.5 text-sm text-gray-700 placeholder-gray-400 outline-none"
-                    aria-label="Search the library"
-                  />
-                </div>
-                <button className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-white hover:bg-primary-mid transition-colors shadow-sm">
-                  Search
-                </button>
-              </div>
+              {/* Search bar — live autocomplete from Atriuum catalog */}
+              <HeroSearchBar placeholder={searchPlaceholder} buttonText={searchButtonText} />
 
               {/* Quick chips */}
               <div className="flex flex-wrap gap-2 mt-5">
@@ -226,7 +214,7 @@ export default async function HomePage({
                 )}
               </div>
               {/* Floating card overlay */}
-              <div className="absolute -bottom-4 -left-8 rounded-xl bg-white p-4 shadow-lg border border-gray-100 animate-fade-in">
+              <div className="absolute -bottom-4 -left-8 rounded-xl bg-white p-4 shadow-lg border border-gray-100 animate-fade-in" style={statsCardPosition ? { transform: statsCardPosition } : undefined}>
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-primary-light flex items-center justify-center">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
@@ -267,10 +255,6 @@ export default async function HomePage({
           {activeAnnouncements.map((a) => (
             <div
               key={a.id}
-              data-cms-item="true"
-              data-cms-item-type="announcement"
-              data-cms-item-id={a.id}
-              data-cms-item-title={a.title}
               className={`rounded-xl p-4 mb-2 flex items-start gap-3 ${
                 a.type === "alert" ? "bg-red-50 border border-red-200 text-red-800" :
                 a.type === "closure" ? "bg-amber-50 border border-amber-200 text-amber-800" :
@@ -300,13 +284,13 @@ export default async function HomePage({
               className={`group relative flex flex-col items-center gap-2.5 rounded-2xl border border-gray-200/80 bg-gradient-to-br ${action.gradient} p-5 md:p-6 text-center shadow-sm hover:shadow-lg hover:border-primary-border hover:-translate-y-0.5 transition-all duration-300`}
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-primary shadow-sm group-hover:shadow-md group-hover:scale-105 transition-all">
-                {action.icon}
+                <CmsIcon name={action.iconName} />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-800">
+                <h3 className="text-sm font-semibold text-gray-800" suppressHydrationWarning>
                   {action.title}
                 </h3>
-                <p className="text-xs text-gray-500 mt-0.5 hidden sm:block">
+                <p className="text-xs text-gray-500 mt-0.5 hidden sm:block" suppressHydrationWarning>
                   {action.description}
                 </p>
               </div>
@@ -333,12 +317,12 @@ export default async function HomePage({
 
       {/* ─── UPCOMING EVENTS CAROUSEL ─── */}
       <div className="mt-16">
-        <EventsCarousel />
+        <EventsCarousel label={eventsLabel} heading={eventsHeading} />
       </div>
 
       {/* ─── STATS STRIP ─── */}
       <section className="mx-auto max-w-site px-4 md:px-8 mt-16">
-        <div className="rounded-2xl bg-gradient-to-r from-primary-dark via-primary-mid to-primary overflow-hidden">
+        <div className={`rounded-2xl overflow-hidden ${!statsStripBg ? "bg-gradient-to-r from-primary-dark via-primary-mid to-primary" : ""}`} style={statsStripBg ? { background: statsStripBg } : undefined}>
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/10">
             {stats.map((stat) => (
               <div key={stat.label} className="p-6 md:p-8 text-center">
@@ -356,10 +340,10 @@ export default async function HomePage({
       <section className="mx-auto max-w-site px-4 md:px-8 mt-16">
         <div className="flex items-end justify-between mb-6">
           <div>
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">
-              Just Added
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1" data-cms-editable="true" data-cms-page="home" data-cms-section="new_arrivals_label" suppressHydrationWarning>
+              {newArrivalsLabel}
             </p>
-            <h2 className="text-h2 text-gray-800">New Arrivals</h2>
+            <h2 className="text-h2 text-gray-800" data-cms-editable="true" data-cms-page="home" data-cms-section="new_arrivals_heading" suppressHydrationWarning>{newArrivalsHeading}</h2>
           </div>
           <Link
             href="/catalog?filter=new"
@@ -414,10 +398,10 @@ export default async function HomePage({
       {/* ─── DIGITAL RESOURCES ─── */}
       <section className="mx-auto max-w-site px-4 md:px-8 mt-16">
         <div className="mb-6">
-          <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">
-            Read Anywhere
+          <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1" data-cms-editable="true" data-cms-page="home" data-cms-section="digital_label" suppressHydrationWarning>
+            {digitalLabel}
           </p>
-          <h2 className="text-h2 text-gray-800">Digital Resources</h2>
+          <h2 className="text-h2 text-gray-800" data-cms-editable="true" data-cms-page="home" data-cms-section="digital_heading" suppressHydrationWarning>{digitalHeading}</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {digitalResources.map((resource) => (
@@ -445,14 +429,15 @@ export default async function HomePage({
       </section>
 
       {/* ─── STAFF PICKS ─── */}
-      <section className="mt-16 py-16 bg-gradient-to-br from-primary-dark via-primary-700 to-primary-mid relative overflow-hidden">
+      <section className="mt-16 py-16 relative overflow-hidden" style={staffPicksBg ? { background: staffPicksBg } : undefined}>
+        {!staffPicksBg && <div className="absolute inset-0 bg-gradient-to-br from-primary-dark via-primary-700 to-primary-mid" />}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(93,202,165,0.15),transparent_50%)]" />
         <div className="relative mx-auto max-w-site px-4 md:px-8">
           <div className="mb-8">
-            <p className="text-xs font-semibold text-primary-200 uppercase tracking-widest mb-1">
-              Recommended
+            <p className="text-xs font-semibold text-primary-200 uppercase tracking-widest mb-1" data-cms-editable="true" data-cms-page="home" data-cms-section="staff_picks_label" suppressHydrationWarning>
+              {staffPicksLabel}
             </p>
-            <h2 className="text-h2 text-white">Staff Picks</h2>
+            <h2 className="text-h2 text-white" data-cms-editable="true" data-cms-page="home" data-cms-section="staff_picks_heading" suppressHydrationWarning>{staffPicksHeading}</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {(cmsStaffPicks || staffPicks).map((pick, i) => {
@@ -461,18 +446,12 @@ export default async function HomePage({
               const author = "staffName" in pick ? pick.author : pick.author;
               const review = "staffName" in pick ? pick.review : (pick as typeof staffPicks[0]).quote;
               const name = "staffName" in pick ? pick.staffName : (pick as typeof staffPicks[0]).librarian;
-              const cover = "staffName" in pick ? (pick.imageUrl || `https://covers.openlibrary.org/b/isbn/${pick.isbn}-M.jpg`) : (pick as typeof staffPicks[0]).cover;
+              const cover = "staffName" in pick ? (pick.imageUrl || (pick.isbn ? `https://covers.openlibrary.org/b/isbn/${pick.isbn}-M.jpg` : "/images/book-placeholder.svg")) : (pick as typeof staffPicks[0]).cover;
               const isDraft = "status" in pick && pick.status === "draft";
-
-              const pickId = "id" in pick ? String(pick.id) : String(i);
 
               return (
                 <div
                   key={i}
-                  data-cms-item="true"
-                  data-cms-item-type="staff-pick"
-                  data-cms-item-id={pickId}
-                  data-cms-item-title={title}
                   className={`group rounded-2xl bg-white/10 backdrop-blur-sm border border-white/10 p-5 hover:bg-white/15 hover:border-white/20 transition-all ${isDraft && isPreview ? "ring-2 ring-amber-400 ring-dashed" : ""}`}
                 >
                   {isDraft && isPreview && (
@@ -486,6 +465,7 @@ export default async function HomePage({
                       alt={`Cover of ${title}`}
                       className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
+                      onError={(e) => { (e.target as HTMLImageElement).src = "/images/book-placeholder.svg"; }}
                     />
                     <div className="absolute left-0 top-0 bottom-0 w-3 bg-black/10" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />

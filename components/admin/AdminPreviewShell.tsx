@@ -109,6 +109,7 @@ export default function AdminPreviewShell() {
       <AdminChatDrawer
         userId={adminUser.id}
         userName={adminUser.displayName}
+        userRole={adminUser.role as "admin" | "editor"}
         currentPage={pathname}
         position={panelPosition}
         open={panelOpen}
@@ -212,6 +213,11 @@ function PreviewToolbar({
           </div>
           <span className="text-[11px] font-semibold text-purple">
             {user.displayName}
+          </span>
+          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${
+            user.role === "admin" ? "bg-purple text-white" : "bg-gray-200 text-gray-600"
+          }`}>
+            {user.role}
           </span>
         </div>
         <a

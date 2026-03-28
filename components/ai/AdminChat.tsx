@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, type FormEvent, type KeyboardEvent, type DragEvent } from "react";
 import { createPortal } from "react-dom";
+import ColorPickerBar from "./ColorPickerBar";
 
 /* ── True screenshot via getDisplayMedia ── */
 
@@ -179,6 +180,7 @@ interface AttachedFile {
 interface AdminChatProps {
   userId: string;
   userName: string;
+  userRole?: "admin" | "editor";
   currentPage?: string;
   position?: "left" | "bottom";
 }
@@ -733,7 +735,7 @@ function TypingIndicator() {
 }
 
 /* ── Main component ── */
-export default function AdminChat({ userId: _userId, userName, currentPage, position = "left" }: AdminChatProps) {
+export default function AdminChat({ userId: _userId, userName, userRole = "editor", currentPage, position = "left" }: AdminChatProps) {
   const isBottom = position === "bottom";
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -748,6 +750,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
   const [autoScreenshot, setAutoScreenshot] = useState(true); // auto-capture with every message
   const [selectMode, setSelectMode] = useState(false);
   const [selectedModel, setSelectedModel] = useState<"claude" | "gemini">("claude");
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const historyBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -843,19 +846,6 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectMode(false); };
     window.addEventListener("keydown", handler as unknown as EventListener);
     return () => window.removeEventListener("keydown", handler as unknown as EventListener);
-  }, []);
-
-  /* Listen for cms-quick-edit events from the InlineEditorOverlay */
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { message?: string } | undefined;
-      if (detail?.message) {
-        setInput(detail.message);
-        setTimeout(() => textareaRef.current?.focus(), 50);
-      }
-    };
-    window.addEventListener("cms-quick-edit", handler);
-    return () => window.removeEventListener("cms-quick-edit", handler);
   }, []);
 
   /* Save conversation to Supabase (debounced) */
@@ -1023,6 +1013,7 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             images,
             currentPage: previewPage,
             model: selectedModel,
+            role: userRole,
           }),
         });
 
@@ -1444,7 +1435,27 @@ export default function AdminChat({ userId: _userId, userName, currentPage, posi
             <span className="hidden sm:inline">Gemini</span>
           </button>
         </div>
+
+        {/* Color picker toggle */}
+        <button
+          onClick={() => setShowColorPicker((v) => !v)}
+          title={showColorPicker ? "Hide color picker" : "Show color picker"}
+          className={`shrink-0 flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+            showColorPicker
+              ? "border-purple bg-purple-50 text-purple"
+              : "border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+          }`}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12" />
+          </svg>
+        </button>
       </div>
+
+      {/* Color picker bar — collapsible */}
+      {showColorPicker && <ColorPickerBar />}
 
       {/* ─── Chat area ─── */}
       <div

@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { adminTools } from "@/lib/ai/adminTools";
 import { verifySession, SESSION_COOKIE_NAME } from "@/lib/auth/adminAuth";
+import { getSchemaForPrompt } from "@/lib/cms/schema";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,17 +24,68 @@ const PAGE_DESCRIPTIONS: Record<string, string> = {
   "/account": "My Account page — patron login for checkouts, holds, and fines.",
 };
 
+/* ── Role-based tool filtering ── */
+// Editor tools: basic CMS content management only
+const EDITOR_TOOLS = new Set([
+  "update_page_content",
+  "create_event",
+  "update_event",
+  "delete_event",
+  "create_announcement",
+  "delete_announcement",
+  "create_staff_pick",
+  "add_closure",
+  "delete_closure",
+  "update_hours",
+  "search_images",
+  "generate_image",
+  "upload_image",
+  "read_page",
+]);
+
+// Admin tools: everything (editors + advanced)
+// Admins get ALL tools including send_newsletter_draft, get_analytics, etc.
+
+function getToolsForRole(role: string) {
+  if (role === "admin") return adminTools;
+  return adminTools.filter((t) => EDITOR_TOOLS.has(t.name));
+}
+
 /* ── System prompt builder ── */
-function buildSystemPrompt(userName: string, currentPage?: string): string {
+function buildSystemPrompt(userName: string, currentPage?: string, role?: string): string {
   const pageContext = currentPage && PAGE_DESCRIPTIONS[currentPage]
     ? `\n\nThe staff member is currently viewing: ${currentPage}\nPage description: ${PAGE_DESCRIPTIONS[currentPage]}\n\nWhen they refer to "this page", "the photo here", "the top image", "this section", etc., they are referring to the page shown in their live preview (${currentPage}). Use this context to understand their requests without asking which page they mean.`
     : currentPage
     ? `\n\nThe staff member is currently viewing: ${currentPage}. When they refer to "this page" or elements on it, they mean this page.`
     : "";
 
+  const isEditor = role === "editor";
+
+  const roleBlock = isEditor
+    ? `\n\nIMPORTANT — ROLE RESTRICTIONS:
+You are helping an EDITOR (not an admin). Editors can:
+- Edit page text, headings, colors, and images via update_page_content
+- Create, update, and delete events
+- Create announcements and closures
+- Add staff picks
+- Search for and generate images
+- Update library hours
+
+Editors CANNOT:
+- Change site code, layout structure, component behavior, or CSS beyond what the CMS schema supports
+- Change icons, fonts, page structure, navigation links, or add new pages
+- Send newsletters or access analytics
+- Make changes that require code deployments
+
+If the user asks for something outside your CMS capabilities (like changing an icon, modifying page layout, changing fonts, adding new features, or anything not in the CMS schema), respond with:
+"That change requires admin-level access to the site code. I'd recommend reaching out to an admin (Paul or Ashley) who can make that update for you. Is there anything else I can help with using the content tools available to me?"
+
+NEVER attempt a workaround (like searching for images when asked to change an icon, or putting CSS in text fields). If you can't do it through the CMS tools, say so clearly.`
+    : `\n\nYou have ADMIN-level access. You can do everything editors can do, plus advanced operations. If a CMS tool can't achieve what's needed, let the user know it would require a code change and offer to describe what's needed.`;
+
   return `You are the content management assistant for Commerce Public Library in Commerce, Texas.
 
-You are currently helping ${userName}. Address them by name when appropriate.
+You are currently helping ${userName} (role: ${role || "editor"}). Address them by name when appropriate.
 
 You help library staff:
 - Add, update, and cancel events
@@ -64,15 +116,16 @@ Guidelines:
 12. When a message contains "Use this image on the page: https://..." or similar, IMMEDIATELY call update_page_content with that URL. Infer the page/section from context (recent conversation) or ask if unclear.
 13. For page redesigns: you can update multiple sections in one response by calling update_page_content multiple times — for the title, description, image, etc. Think comprehensively about what makes a great library webpage.
 14. You CAN redesign entire pages. When asked to redesign, update_page_content for ALL relevant sections: hero_title, hero_subtitle, hero_description, hero_image, hero_bg_color, hero_accent_color, etc. Then search for or generate a fitting image.
-15. You can SEE the current live content
-16. COLOR SECTIONS — these accept any valid CSS color or gradient string. ALWAYS call update_page_content — do NOT put colors in text/description fields:
-    HEADER / TOP BAR:
-    - page="global", section="header_bg_color" → controls the top navigation bar background. Default is dark teal #114d3e. Examples: "#3B4A26" (dark olive), "#FF6B35" (orange), "#1a1a2e" (dark navy). When the user asks to change the "top bar", "header", "navigation", or "menu bar" color, use this.
-    HERO / BANNER:
-    - page="home", section="hero_bg_color" → controls the big hero/banner background. Accepts any CSS color or gradient.
-    - page="home", section="hero_accent_color" → controls the subtitle highlight color in the hero.
-    To reset any color to default, set its content to "" (empty string).
-    Color reference: olive green="#556B2F", dark olive="#3B4A26", sage="#87AE73", orange="#FF6B35", navy="#1a1a2e". of the page the staff member is viewing — it is injected below the guidelines as "LIVE PAGE CONTENT". Use this to answer questions like "what does the page say?", "what's the hero image?", "what events are showing?" — answer directly from that data without calling any tool. Use read_page tool only when you need to check a DIFFERENT page than the one currently being viewed.
+15. You can SEE the current live content of the page the staff member is viewing — it is injected below the guidelines as "LIVE PAGE CONTENT". Use this to answer questions like "what does the page say?", "what's the hero image?", "what events are showing?" — answer directly from that data without calling any tool. Use read_page tool only when you need to check a DIFFERENT page than the one currently being viewed.
+16. CMS SCHEMA — Here are ALL editable sections you can change via update_page_content. ONLY use section names from this list:
+${getSchemaForPrompt()}
+    RULES:
+    - For color/gradient sections: save ONLY the CSS value (e.g. "#FF6B35", "linear-gradient(...)"). Do NOT include the property name.
+    - For css sections (like stats_card_position): save ONLY the transform value (e.g. "translateY(-200px)"). Do NOT include "transform:".
+    - For text sections: save the plain text content.
+    - To reset any section to its default, set content to "" (empty string).
+    - Color reference: olive green="#556B2F", dark olive="#3B4A26", sage="#87AE73", orange="#FF6B35", navy="#1a1a2e".
+${roleBlock}
 
 Current date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.${pageContext}`;
 }
@@ -95,6 +148,7 @@ interface RequestBody {
   images?: ImageData[];
   currentPage?: string;
   model?: "claude" | "gemini";
+  role?: "admin" | "editor";
 }
 
 /* ── Convert Anthropic tool schema → Gemini FunctionDeclaration ── */
@@ -187,12 +241,15 @@ export async function POST(request: NextRequest) {
   }
 
   const { message, conversationHistory = [], images = [], currentPage, model = "claude" } = body;
+  // Use role from the verified session token (not from request body) for security
+  const userRole = session.role || "editor";
 
   if ((!message || typeof message !== "string") && images.length === 0) {
     return NextResponse.json({ error: "message or images required" }, { status: 400 });
   }
 
-  const systemPrompt = buildSystemPrompt(session.displayName, currentPage);
+  const systemPrompt = buildSystemPrompt(session.displayName, currentPage, userRole);
+  const roleFilteredTools = getToolsForRole(userRole);
   const livePageContext = await getLivePageContext(currentPage);
   const fullSystem = systemPrompt + livePageContext;
   const encoder = new TextEncoder();
@@ -236,7 +293,7 @@ export async function POST(request: NextRequest) {
             model: "claude-sonnet-4-20250514",
             max_tokens: 4096,
             system: fullSystem,
-            tools: adminTools,
+            tools: roleFilteredTools,
             messages,
             stream: true,
           });
@@ -264,7 +321,7 @@ export async function POST(request: NextRequest) {
   }
 
   const genai = new GoogleGenAI({ apiKey: geminiKey });
-  const geminiTools = anthropicToolsToGemini(adminTools);
+  const geminiTools = anthropicToolsToGemini(roleFilteredTools);
 
   // Build Gemini conversation history
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

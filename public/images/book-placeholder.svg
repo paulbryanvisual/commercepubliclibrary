@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300" viewBox="0 0 200 300">
+  <rect width="200" height="300" fill="#e8f5f0" rx="8"/>
+  <g transform="translate(70, 110)" stroke="#1D9E75" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 50V0h40v50H0z"/>
+    <path d="M5 0v50"/>
+    <path d="M12 12h20M12 18h16M12 24h12"/>
+    <path d="M48 50V8h-8"/>
+    <path d="M40 0l8 8"/>
+  </g>
+  <text x="100" y="195" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#6b9e8d">No Cover</text>
+  <text x="100" y="212" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#9ebdb2">Available</text>
+</svg>
