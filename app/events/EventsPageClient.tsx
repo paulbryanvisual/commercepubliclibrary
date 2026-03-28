@@ -303,11 +303,11 @@ function EventListView({ events }: { events: LibraryEvent[] }) {
             <div className="flex flex-col sm:flex-row sm:items-start gap-4">
               {/* Event image */}
               {event.image && (
-                <div className="w-full sm:w-24 sm:h-24 shrink-0 rounded-xl overflow-hidden bg-gray-100">
+                <div className="w-full sm:w-72 sm:h-48 shrink-0 rounded-xl overflow-hidden bg-gray-100">
                   <img
                     src={event.image}
                     alt={event.imageAlt || event.title}
-                    className="w-full h-32 sm:h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-48 sm:h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
                 </div>
