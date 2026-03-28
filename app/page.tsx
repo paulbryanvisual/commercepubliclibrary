@@ -446,7 +446,7 @@ export default async function HomePage({
               const author = "staffName" in pick ? pick.author : pick.author;
               const review = "staffName" in pick ? pick.review : (pick as typeof staffPicks[0]).quote;
               const name = "staffName" in pick ? pick.staffName : (pick as typeof staffPicks[0]).librarian;
-              const cover = "staffName" in pick ? (pick.imageUrl || `https://covers.openlibrary.org/b/isbn/${pick.isbn}-M.jpg`) : (pick as typeof staffPicks[0]).cover;
+              const cover = "staffName" in pick ? (pick.imageUrl || (pick.isbn ? `https://covers.openlibrary.org/b/isbn/${pick.isbn}-M.jpg` : "/images/book-placeholder.svg")) : (pick as typeof staffPicks[0]).cover;
               const isDraft = "status" in pick && pick.status === "draft";
 
               return (
@@ -465,6 +465,7 @@ export default async function HomePage({
                       alt={`Cover of ${title}`}
                       className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
+                      onError={(e) => { (e.target as HTMLImageElement).src = "/images/book-placeholder.svg"; }}
                     />
                     <div className="absolute left-0 top-0 bottom-0 w-3 bg-black/10" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
