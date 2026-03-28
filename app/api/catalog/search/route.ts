@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { proxyCoverUrl } from "@/lib/catalog/cover-proxy";
 
 export const runtime = "nodejs";
 
@@ -45,7 +46,7 @@ async function handleSuggest(q: string) {
   const localResults = (localBooks || []).map((b) => ({
     title: b.title,
     author: b.author,
-    coverUrl: b.cover_url,
+    coverUrl: proxyCoverUrl(b.cover_url),
     opacUrl: `${ATRIUUM_BASE}/index.html#search:ExpertSearch?ST0=T&SF0=${encodeURIComponent(b.title)}`,
   }));
 
@@ -89,7 +90,7 @@ async function handleFull(q: string, limit: number) {
     author: row.author || "Unknown",
     year: row.year || null,
     isbn: row.isbn,
-    coverUrl: row.cover_url,
+    coverUrl: proxyCoverUrl(row.cover_url),
     subjects: row.subjects || [],
     publisher: row.publisher,
     pages: row.pages,
@@ -143,7 +144,7 @@ async function handleFull(q: string, limit: number) {
             author: Array.isArray(doc.author_name) ? (doc.author_name as string[]).join(", ") : "Unknown",
             year: (doc.first_publish_year as number) || null,
             isbn: isbn as string | null,
-            coverUrl,
+            coverUrl: proxyCoverUrl(coverUrl),
             subjects: Array.isArray(doc.subject) ? (doc.subject as string[]).slice(0, 5) : [],
             publisher: Array.isArray(doc.publisher) ? (doc.publisher as string[])[0] : null,
             pages: (doc.number_of_pages_median as number) || null,

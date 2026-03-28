@@ -1,3 +1,5 @@
+import { filterBooks } from "./content-filter";
+
 export type Genre =
   | "Fiction"
   | "Mystery"
@@ -20,9 +22,10 @@ export interface Book {
 }
 
 function bookWithCover(book: Omit<Book, "coverUrl">): Book {
+  const externalUrl = `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`;
   return {
     ...book,
-    coverUrl: `https://covers.openlibrary.org/b/isbn/${book.isbn}-L.jpg`,
+    coverUrl: `/api/catalog/image-proxy?url=${encodeURIComponent(externalUrl)}`,
   };
 }
 
@@ -334,6 +337,9 @@ export const books: Book[] = [
   }),
 ];
 
+/** Books filtered for browse/discovery (banned/NSFW removed) */
+export const browsableBooks: Book[] = filterBooks(books);
+
 export const genres: Genre[] = [
   "Fiction",
   "Mystery",
@@ -350,7 +356,7 @@ export function getBookByIsbn(isbn: string): Book | undefined {
 }
 
 export function getBooksByGenre(genre: Genre): Book[] {
-  return books.filter((b) => b.genre === genre);
+  return browsableBooks.filter((b) => b.genre === genre);
 }
 
 export function getRelatedBooks(book: Book, limit = 6): Book[] {

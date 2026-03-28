@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { type Genre } from "@/lib/catalog/books";
+import { proxyCoverUrl } from "@/lib/catalog/cover-proxy";
 
 /** Lightweight book shape for surprise picks (from API) */
 interface SurpriseBook {
@@ -171,36 +172,51 @@ function GenreTileCard({ tile, onClick }: { tile: GenreTile; onClick: () => void
   );
 }
 
+/** Width of each book card + gap in the roulette strip */
+const CARD_W = 108; // 96px card + 12px gap
+
 function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => void }) {
+  const [rouletteBooks, setRouletteBooks] = useState<SurpriseBook[]>([]);
   const [surpriseBook, setSurpriseBook] = useState<SurpriseBook | null>(null);
-  const [isSpinning, setIsSpinning] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "spinning" | "landed">("idle");
+  const [stripOffset, setStripOffset] = useState(0);
+  const [winnerIdx, setWinnerIdx] = useState(0);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSurprise = useCallback(async () => {
-    setIsSpinning(true);
+    setPhase("spinning");
+    setSurpriseBook(null);
+    setStripOffset(0);
     try {
-      // Fetch a random batch from the API
       const res = await fetch(`/api/catalog/browse?genre=all&limit=20&random=true`);
       const data = await res.json();
       const books: SurpriseBook[] = data.books || [];
+      if (books.length === 0) { setPhase("idle"); return; }
 
-      if (books.length === 0) {
-        setIsSpinning(false);
-        return;
-      }
+      // Triple the array so the strip can travel far
+      const tripled = [...books, ...books, ...books];
+      setRouletteBooks(tripled);
 
-      // Animate through books quickly then land on one
-      let count = 0;
-      const interval = setInterval(() => {
-        const randomBook = books[Math.floor(Math.random() * books.length)];
-        setSurpriseBook(randomBook);
-        count++;
-        if (count >= 8) {
-          clearInterval(interval);
-          setIsSpinning(false);
-        }
-      }, 120);
+      // Pick a winner in the middle copy so we scroll past the first set
+      const winner = books.length + Math.floor(Math.random() * books.length);
+      setWinnerIdx(winner);
+
+      // Use requestAnimationFrame to set the final offset after the strip renders at 0
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setStripOffset(winner * CARD_W);
+        });
+      });
+
+      // Land after the CSS transition finishes (~3.5s)
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        setSurpriseBook(books[winner % books.length]);
+        setPhase("landed");
+      }, 3600);
     } catch {
-      setIsSpinning(false);
+      setPhase("idle");
     }
   }, []);
 
@@ -219,75 +235,158 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
     });
   }, [surpriseBook, onSelectBook]);
 
+  const isSpinning = phase === "spinning";
+
   return (
-    <div className="rounded-2xl border border-gray-200 bg-gradient-to-r from-amber-50 via-white to-rose-50 p-6 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center gap-6">
-        {/* Left - CTA */}
-        <div className="flex-1">
+    <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-amber-50 via-white to-rose-50 overflow-hidden">
+      {/* Side-by-side layout: controls left, wheel right */}
+      <div className="flex flex-col md:flex-row">
+        {/* Left panel: title, buttons, winner */}
+        <div className="flex-shrink-0 p-6 md:p-8 md:w-[320px] flex flex-col justify-center">
           <div className="flex items-center gap-3 mb-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-400 to-rose-400 flex items-center justify-center">
-              <span className="text-xl">🎲</span>
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 flex items-center justify-center shadow-lg shadow-rose-500/20">
+              <span className={`text-2xl ${isSpinning ? "animate-bounce" : ""}`}>🎲</span>
             </div>
             <div>
-              <h3 className="font-bold text-gray-800">Feeling Adventurous?</h3>
-              <p className="text-xs text-gray-500">Let fate choose your next read</p>
+              <h3 className="text-lg font-bold text-gray-800">Feeling Adventurous?</h3>
+              <p className="text-xs text-gray-500">Let fate pick your next read</p>
             </div>
           </div>
-          <button
-            onClick={handleSurprise}
-            disabled={isSpinning}
-            className="rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 px-6 py-3 text-sm font-semibold text-white hover:shadow-lg hover:shadow-rose-500/25 transition-all disabled:opacity-60 flex items-center gap-2"
-          >
-            {isSpinning ? (
-              <>
-                <span className="animate-spin h-4 w-4 rounded-full border-2 border-white border-t-transparent" />
-                Picking...
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
-                  <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
-                  <line x1="12" y1="22.08" x2="12" y2="12" />
-                </svg>
-                Surprise Me!
-              </>
-            )}
-          </button>
+
+          <div className="flex flex-wrap items-center gap-3 mt-2">
+            <button
+              onClick={handleSurprise}
+              disabled={isSpinning}
+              className="rounded-xl bg-gradient-to-r from-amber-500 via-rose-500 to-pink-500 px-6 py-3 text-sm font-bold text-white hover:shadow-xl hover:shadow-rose-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-60 disabled:hover:scale-100 flex items-center gap-2"
+            >
+              {isSpinning ? (
+                <>
+                  <span className="animate-spin h-4 w-4 rounded-full border-2 border-white border-t-transparent" />
+                  Spinning...
+                </>
+              ) : phase === "landed" ? (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M1 4v6h6M23 20v-6h-6" />
+                    <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" />
+                  </svg>
+                  Spin Again!
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+                    <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+                    <line x1="12" y1="22.08" x2="12" y2="12" />
+                  </svg>
+                  Surprise Me!
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Winner card inline */}
+          {surpriseBook && phase === "landed" && (
+            <button
+              onClick={handleClick}
+              className="mt-4 flex items-center gap-3 rounded-xl bg-white border-2 border-amber-200 p-3 shadow-lg shadow-amber-500/10 hover:shadow-xl hover:border-amber-300 transition-all group text-left animate-[fadeScaleIn_0.4s_ease-out]"
+            >
+              <div className="relative aspect-[2/3] w-14 shrink-0 rounded-lg overflow-hidden bg-gray-100 shadow-md">
+                {surpriseBook.coverUrl ? (
+                  <Image src={surpriseBook.coverUrl} alt={surpriseBook.title} fill sizes="56px" className="object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-100 to-rose-100 p-1">
+                    <span className="text-[8px] font-semibold text-amber-700 text-center line-clamp-2">{surpriseBook.title}</span>
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-amber-600 font-bold mb-0.5">Your pick!</p>
+                <p className="text-sm font-bold text-gray-800 line-clamp-2 group-hover:text-[#1D9E75] transition-colors">
+                  {surpriseBook.title}
+                </p>
+                <p className="text-xs text-gray-500">{surpriseBook.author}</p>
+                <p className="text-[10px] text-primary font-medium mt-1">Tap for details →</p>
+              </div>
+            </button>
+          )}
         </div>
 
-        {/* Right - Result */}
-        {surpriseBook && (
-          <button
-            onClick={handleClick}
-            className="flex items-center gap-4 rounded-xl bg-white border border-gray-100 p-4 shadow-sm hover:shadow-md transition-all group max-w-sm"
-          >
-            <div className="relative aspect-[2/3] w-16 shrink-0 rounded-lg overflow-hidden bg-gray-100">
-              {surpriseBook.coverUrl ? (
-                <Image
-                  src={surpriseBook.coverUrl}
-                  alt={surpriseBook.title}
-                  fill
-                  sizes="64px"
-                  className="object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-100 to-rose-100 p-1">
-                  <span className="text-[9px] font-semibold text-amber-700 text-center line-clamp-3">{surpriseBook.title}</span>
-                </div>
-              )}
+        {/* Right panel: roulette wheel */}
+        <div className="relative flex-1 min-h-[220px] overflow-hidden">
+          {/* Center pointer */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[10px] border-r-[10px] border-t-[14px] border-l-transparent border-r-transparent border-t-amber-500" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[10px] border-r-[10px] border-b-[14px] border-l-transparent border-r-transparent border-b-amber-500" />
+
+          {/* Gradient fade edges */}
+          <div className="absolute inset-y-0 left-0 w-20 z-10 bg-gradient-to-r from-amber-50/90 to-transparent pointer-events-none" />
+          <div className="absolute inset-y-0 right-0 w-20 z-10 bg-gradient-to-l from-rose-50/90 to-transparent pointer-events-none" />
+
+          {rouletteBooks.length > 0 ? (
+            <div
+              ref={stripRef}
+              className="flex items-center gap-3 h-full px-4"
+              style={{
+                transform: `translateX(calc(50% - ${stripOffset}px - ${CARD_W / 2}px))`,
+                transition: stripOffset === 0
+                  ? "none"
+                  : "transform 3.5s cubic-bezier(0.15, 0.82, 0.25, 1)",
+              }}
+            >
+              {rouletteBooks.map((book, i) => {
+                const isWinner = phase === "landed" && i === winnerIdx;
+                return (
+                  <div
+                    key={`${book.id}-${i}`}
+                    className={`flex-shrink-0 transition-all duration-500 ${
+                      isWinner ? "scale-110 z-20" : ""
+                    }`}
+                    style={{ width: 96 }}
+                  >
+                    <div className={`relative aspect-[2/3] w-full rounded-xl overflow-hidden border-2 shadow-md transition-all duration-500 ${
+                      isWinner
+                        ? "border-amber-400 shadow-amber-500/40 ring-4 ring-amber-400/30"
+                        : "border-gray-200/60"
+                    }`}>
+                      {book.coverUrl ? (
+                        <Image
+                          src={book.coverUrl}
+                          alt={book.title}
+                          fill
+                          sizes="96px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-100 to-rose-100 p-2">
+                          <span className="text-[10px] font-semibold text-amber-700 text-center line-clamp-3">{book.title}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="text-left min-w-0">
-              <p className="text-xs text-amber-600 font-semibold mb-0.5">Your surprise pick:</p>
-              <p className="text-sm font-bold text-gray-800 line-clamp-2 group-hover:text-[#1D9E75] transition-colors">
-                {surpriseBook.title}
-              </p>
-              <p className="text-xs text-gray-400 mt-0.5">{surpriseBook.author}</p>
-              <p className="text-[10px] text-gray-400 mt-1">Tap to see details →</p>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="flex gap-3">
+                {[...Array(6)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="w-[96px] aspect-[2/3] rounded-xl bg-gradient-to-br from-amber-100 to-rose-100 opacity-25"
+                  />
+                ))}
+              </div>
             </div>
-          </button>
-        )}
+          )}
+        </div>
       </div>
+
+      <style jsx>{`
+        @keyframes fadeScaleIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { proxyCoverUrl } from "@/lib/catalog/cover-proxy";
+import { shouldFilterBook } from "@/lib/catalog/content-filter";
 
 export const runtime = "nodejs";
 
@@ -58,7 +60,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Failed to browse catalog" }, { status: 500 });
     }
 
-    const books = (data || []).map((row) => ({
+    const allBooks = (data || []).map((row) => ({
       id: row.id,
       isbn: row.isbn,
       title: row.title,
@@ -67,11 +69,16 @@ export async function GET(req: NextRequest) {
       genre: row.genre,
       description: row.description,
       subjects: row.subjects || [],
-      coverUrl: row.cover_url,
+      coverUrl: proxyCoverUrl(row.cover_url),
       publisher: row.publisher,
       pages: row.pages,
       openLibraryKey: row.open_library_key,
     }));
+
+    // Filter out banned/NSFW books from browse (they remain searchable)
+    const books = allBooks.filter(
+      (b) => !shouldFilterBook(b.title, b.subjects)
+    );
 
     return NextResponse.json({
       books,
