@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { patronInfo } from "@/lib/sip2/client";
+import { NextResponse } from "next/server";
+import { getPatronAccount } from "@/lib/atriuum/client";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 
@@ -11,7 +11,7 @@ const PATRON_SECRET = new TextEncoder().encode(
 const PATRON_COOKIE = "cpl_patron_session";
 
 /** GET — get full patron account info (checkouts, holds, fines) */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     // Verify patron session
     const cookieStore = await cookies();
@@ -21,50 +21,48 @@ export async function GET(req: NextRequest) {
     }
 
     const { payload } = await jwtVerify(token, PATRON_SECRET);
-    const patronId = payload.patronId as string;
+    const patronBarcode = payload.patronId as string;
 
-    // What info to retrieve
-    const url = new URL(req.url);
-    const infoType = (url.searchParams.get("type") || "all") as
-      | "hold"
-      | "overdue"
-      | "charged"
-      | "fine"
-      | "all";
+    // Get full account details from Atriuum
+    const account = await getPatronAccount(patronBarcode);
 
-    // We need the patron's PIN again for SIP2 — but we don't store it.
-    // Use empty password; many SIP2 servers accept this for info requests
-    // after the patron has been authenticated via the 63 message.
-    // If this doesn't work, we'll need to store an encrypted PIN in the JWT.
-    const info = await patronInfo(patronId, "", infoType);
-
-    if (!info.valid) {
+    if (!account) {
       return NextResponse.json({ error: "Patron not found" }, { status: 404 });
     }
 
     return NextResponse.json({
       ok: true,
       patron: {
-        name: info.name,
-        email: info.email,
-        phone: info.phone,
-        cardNumber: patronId,
-        feeAmount: info.feeAmount,
+        name: account.name,
+        email: account.email,
+        phone: account.phone,
+        cardNumber: account.barcode,
+        patronClass: account.patronClass,
+        cardExpires: account.cardExpires,
+        cardExpired: account.cardExpired,
+        isBlocked: account.isBlocked,
+        address: `${account.address}, ${account.city}, ${account.state} ${account.zip}`,
       },
       counts: {
-        holds: info.holdItemsCount,
-        overdue: info.overdueItemsCount,
-        charged: info.chargedItemsCount,
-        fines: info.fineItemsCount,
-        unavailableHolds: info.unavailableHoldsCount,
+        itemsOut: account.itemsOut,
+        overdue: account.totalOverdue,
       },
-      items: {
-        holds: info.holdItems.filter(Boolean),
-        overdue: info.overdueItems.filter(Boolean),
-        charged: info.chargedItems.filter(Boolean),
-        fines: info.fineItems.filter(Boolean),
+      fines: {
+        total: account.totalFines,
+        projectedLateFees: account.projectedLateFee,
       },
-      screenMessage: info.screenMessage,
+      items: account.materialsOut.map((item) => ({
+        title: item.title,
+        barcode: item.barcode,
+        callNumber: item.callNumber,
+        dueDate: item.dueDate,
+        checkoutDate: item.checkoutDate,
+        isOverdue: item.isOverdue,
+        author: item.author,
+        materialType: item.materialType,
+        renewalCount: item.renewalCount,
+        finesOwed: item.finesOwed,
+      })),
     });
   } catch (err: unknown) {
     console.error("Patron account error:", err);

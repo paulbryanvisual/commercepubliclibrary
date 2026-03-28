@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { patronStatus } from "@/lib/sip2/client";
+import { patronLogin, getPatronAccount } from "@/lib/atriuum/client";
 import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
@@ -10,7 +10,7 @@ const PATRON_SECRET = new TextEncoder().encode(
 );
 const PATRON_COOKIE = "cpl_patron_session";
 
-/** POST — authenticate patron with library card + PIN */
+/** POST — authenticate patron with library card + password */
 export async function POST(req: NextRequest) {
   try {
     const { cardNumber, pin } = await req.json();
@@ -19,20 +19,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Card number and PIN are required" }, { status: 400 });
     }
 
-    const status = await patronStatus(cardNumber, pin);
+    // Authenticate via Atriuum API
+    const result = await patronLogin(cardNumber, pin);
 
-    if (!status.valid || !status.authenticated) {
+    if (!result.success) {
       return NextResponse.json({
-        error: "Invalid card number or PIN",
-        message: status.screenMessage || "Authentication failed",
+        error: "Invalid card number or password",
+        message: result.error || "Authentication failed",
       }, { status: 401 });
     }
+
+    // Get full account details
+    const account = await getPatronAccount(cardNumber);
 
     // Create a patron session JWT
     const token = await new SignJWT({
       patronId: cardNumber,
-      name: status.name,
-      email: status.email,
+      atriuumId: result.patronId,
+      name: result.name,
+      email: account?.email || "",
     })
       .setProtectedHeader({ alg: "HS256" })
       .setIssuedAt()
@@ -52,15 +57,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       patron: {
-        name: status.name,
-        email: status.email,
-        phone: status.phone,
+        name: result.name,
+        email: account?.email || "",
+        phone: account?.phone || "",
         cardNumber,
-        holdItems: status.holdItemsCount,
-        overdueItems: status.overdueItemsCount,
-        chargedItems: status.chargedItemsCount,
-        fineItems: status.fineItemsCount,
-        feeAmount: status.feeAmount,
+        overdueItems: account?.totalOverdue || 0,
+        chargedItems: account?.itemsOut || 0,
+        feeAmount: account?.totalFines || "$0.00",
+        cardExpires: account?.cardExpires || "",
       },
     });
   } catch (err: unknown) {
