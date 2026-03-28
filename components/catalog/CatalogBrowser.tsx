@@ -82,31 +82,31 @@ function BookCard({
             src={book.coverUrl}
             alt={`Cover of ${book.title}`}
             fill
-            sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, (max-width: 1024px) 20vw, 16vw"
+            sizes="(max-width: 640px) 45vw, (max-width: 768px) 30vw, (max-width: 1024px) 22vw, 20vw"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-3 text-center">
-            <span className="text-sm font-semibold text-primary-dark leading-tight line-clamp-3">
+          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-4 text-center">
+            <span className="text-base font-semibold text-primary-dark leading-tight line-clamp-3">
               {book.title}
             </span>
-            <span className="mt-1 text-xs text-primary-mid">{book.author}</span>
+            <span className="mt-1.5 text-sm text-primary-mid">{book.author}</span>
           </div>
         )}
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 rounded-xl p-3">
-          <span className="text-sm font-semibold text-white leading-tight line-clamp-2">
+        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 rounded-xl p-4">
+          <span className="text-base font-semibold text-white leading-tight line-clamp-2">
             {book.title}
           </span>
-          <span className="mt-0.5 text-xs text-white/80">{book.author}</span>
+          <span className="mt-1 text-sm text-white/80">{book.author}</span>
         </div>
       </div>
 
-      <div className="mt-2 sm:hidden">
-        <p className="text-xs font-medium text-gray-700 line-clamp-1">{book.title}</p>
-        <p className="text-[11px] text-gray-400 line-clamp-1">{book.author}</p>
+      <div className="mt-2.5">
+        <p className="text-sm font-medium text-gray-700 line-clamp-1">{book.title}</p>
+        <p className="text-xs text-gray-400 line-clamp-1">{book.author}</p>
       </div>
     </button>
   );
@@ -206,15 +206,15 @@ export default function CatalogBrowser({ initialGenre }: { initialGenre?: Genre 
 
       {/* Loading skeleton */}
       {loading ? (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-5">
-          {[...Array(18)].map((_, i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5 md:gap-6">
+          {[...Array(15)].map((_, i) => (
             <div key={i} className="aspect-[2/3] bg-gray-200 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : (
         <>
           {/* Book grid */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5 md:gap-6">
             {books.map((book) => (
               <BookCard key={book.id} book={book} onClick={handleSelectBook} />
             ))}
