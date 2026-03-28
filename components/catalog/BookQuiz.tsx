@@ -1,8 +1,35 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { books, type Book, type Genre } from "@/lib/catalog/books";
+import { type Genre } from "@/lib/catalog/books";
+
+/** Lightweight book shape for quiz results (fetched from API) */
+interface QuizBook {
+  id: number;
+  title: string;
+  author: string | null;
+  year: number | null;
+  genre: string;
+  description: string | null;
+  subjects: string[];
+  coverUrl: string | null;
+  isbn: string | null;
+  openLibraryKey: string | null;
+}
+
+/** The shape the parent expects when a book is selected */
+interface BookInfo {
+  title: string;
+  author?: string;
+  year?: number | null;
+  isbn?: string | null;
+  coverUrl?: string | null;
+  subjects?: string[];
+  description?: string;
+  genre?: string;
+  openLibraryKey?: string;
+}
 
 interface QuizStep {
   question: string;
@@ -40,22 +67,47 @@ const quizSteps: QuizStep[] = [
   },
 ];
 
-function scoreBook(book: Book, answers: string[]): number {
+/** Map quiz answers to genres to fetch from the API */
+function answersToGenres(answers: string[]): Genre[] {
+  const [mood, audience, vibe] = answers;
+  const genres = new Set<Genre>();
+
+  // Mood -> genres
+  if (mood === "adventure") { genres.add("Sci-Fi"); genres.add("Fiction"); genres.add("Teens"); }
+  if (mood === "think") { genres.add("Nonfiction"); genres.add("Biography"); }
+  if (mood === "heart") { genres.add("Romance"); genres.add("Fiction"); }
+  if (mood === "mystery") { genres.add("Mystery"); }
+  if (mood === "surprise") { /* all genres */ }
+
+  // Audience -> genres
+  if (audience === "teen") genres.add("Teens");
+  if (audience === "kid") genres.add("Kids");
+
+  // Vibe -> genres
+  if (vibe === "true") { genres.add("Biography"); genres.add("Nonfiction"); }
+  if (vibe === "fiction") { genres.add("Fiction"); genres.add("Mystery"); genres.add("Romance"); genres.add("Sci-Fi"); }
+  if (vibe === "learn") { genres.add("Nonfiction"); genres.add("Biography"); }
+
+  return genres.size > 0 ? Array.from(genres) : ["Fiction", "Mystery", "Romance", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction"];
+}
+
+function scoreBook(book: QuizBook, answers: string[]): number {
   let score = 0;
   const [mood, audience, vibe] = answers;
+  const subjectsLower = book.subjects.map((s) => s.toLowerCase());
 
   // Mood matching
   if (mood === "adventure") {
-    if (book.subjects.some((s) => ["adventure", "fantasy", "dragons", "mythology", "survival"].includes(s.toLowerCase()))) score += 5;
+    if (subjectsLower.some((s) => ["adventure", "fantasy", "dragons", "mythology", "survival", "quest", "epic"].some((k) => s.includes(k)))) score += 5;
     if (["Sci-Fi", "Fiction", "Teens"].includes(book.genre)) score += 2;
   } else if (mood === "think") {
-    if (book.subjects.some((s) => ["psychology", "science", "education", "ecology", "neuroscience"].includes(s.toLowerCase()))) score += 5;
+    if (subjectsLower.some((s) => ["psychology", "science", "education", "ecology", "neuroscience", "philosophy", "history"].some((k) => s.includes(k)))) score += 5;
     if (["Nonfiction", "Biography"].includes(book.genre)) score += 3;
   } else if (mood === "heart") {
-    if (book.subjects.some((s) => ["romance", "friendship", "family", "love", "inspiration", "women"].includes(s.toLowerCase()))) score += 5;
+    if (subjectsLower.some((s) => ["romance", "friendship", "family", "love", "inspiration", "women", "relationship"].some((k) => s.includes(k)))) score += 5;
     if (["Romance", "Fiction"].includes(book.genre)) score += 2;
   } else if (mood === "mystery") {
-    if (book.subjects.some((s) => ["mystery", "thriller", "suspense", "crime", "detective"].includes(s.toLowerCase()))) score += 5;
+    if (subjectsLower.some((s) => ["mystery", "thriller", "suspense", "crime", "detective", "murder"].some((k) => s.includes(k)))) score += 5;
     if (book.genre === "Mystery") score += 4;
   } else if (mood === "surprise") {
     score += Math.random() * 10;
@@ -69,28 +121,60 @@ function scoreBook(book: Book, answers: string[]): number {
 
   // Vibe matching
   if (vibe === "true" && ["Biography", "Nonfiction"].includes(book.genre)) score += 4;
-  if (vibe === "true" && book.subjects.some((s) => ["memoir", "history", "WWII", "Holocaust"].includes(s.toLowerCase()))) score += 3;
+  if (vibe === "true" && subjectsLower.some((s) => ["memoir", "history", "true crime", "autobiography"].some((k) => s.includes(k)))) score += 3;
   if (vibe === "fiction" && ["Fiction", "Mystery", "Romance", "Sci-Fi", "Kids", "Teens"].includes(book.genre)) score += 3;
   if (vibe === "learn" && ["Nonfiction", "Biography"].includes(book.genre)) score += 4;
   if (vibe === "any") score += 1;
 
+  // Bonus for having a cover image (better UX)
+  if (book.coverUrl) score += 1;
+
   return score;
 }
 
-export default function BookQuiz({ onSelectBook }: { onSelectBook: (book: Book) => void }) {
+export default function BookQuiz({ onSelectBook }: { onSelectBook: (book: BookInfo) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [recommendations, setRecommendations] = useState<QuizBook[]>([]);
+  const [loadingResults, setLoadingResults] = useState(false);
 
-  const recommendations = useMemo(() => {
-    if (!showResults || answers.length < 3) return [];
-    return books
-      .map((b) => ({ book: b, score: scoreBook(b, answers) }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-      .map((r) => r.book);
-  }, [showResults, answers]);
+  const fetchRecommendations = useCallback(async (finalAnswers: string[]) => {
+    setLoadingResults(true);
+    try {
+      const genres = answersToGenres(finalAnswers);
+      // Fetch books from multiple relevant genres
+      const fetches = genres.map((g) =>
+        fetch(`/api/catalog/browse?genre=${g}&limit=30&offset=${Math.floor(Math.random() * 20)}`)
+          .then((r) => r.json())
+          .then((d) => (d.books || []) as QuizBook[])
+          .catch(() => [] as QuizBook[])
+      );
+      const results = await Promise.all(fetches);
+      const allBooks = results.flat();
+
+      // Deduplicate by id
+      const seen = new Set<number>();
+      const unique = allBooks.filter((b) => {
+        if (seen.has(b.id)) return false;
+        seen.add(b.id);
+        return true;
+      });
+
+      // Score and pick top 5
+      const scored = unique
+        .map((b) => ({ book: b, score: scoreBook(b, finalAnswers) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map((r) => r.book);
+
+      setRecommendations(scored);
+    } catch {
+      setRecommendations([]);
+    }
+    setLoadingResults(false);
+  }, []);
 
   const handleAnswer = (value: string) => {
     const newAnswers = [...answers, value];
@@ -99,13 +183,29 @@ export default function BookQuiz({ onSelectBook }: { onSelectBook: (book: Book) 
       setStep(step + 1);
     } else {
       setShowResults(true);
+      fetchRecommendations(newAnswers);
     }
   };
+
+  const handleSelectBook = useCallback((book: QuizBook) => {
+    onSelectBook({
+      title: book.title,
+      author: book.author || undefined,
+      year: book.year,
+      isbn: book.isbn,
+      coverUrl: book.coverUrl,
+      subjects: book.subjects,
+      description: book.description || undefined,
+      genre: book.genre,
+      openLibraryKey: book.openLibraryKey || undefined,
+    });
+  }, [onSelectBook]);
 
   const reset = () => {
     setStep(0);
     setAnswers([]);
     setShowResults(false);
+    setRecommendations([]);
   };
 
   if (!isOpen) {
@@ -203,11 +303,29 @@ export default function BookQuiz({ onSelectBook }: { onSelectBook: (book: Book) 
             <p className="text-sm text-gray-500 mb-5">
               Based on your answers, we think you&apos;ll love these:
             </p>
-            <div className="flex gap-4 overflow-x-auto pb-3 -mx-2 px-2">
-              {recommendations.map((book) => (
-                <QuizResultCard key={book.isbn} book={book} onClick={onSelectBook} />
-              ))}
-            </div>
+
+            {loadingResults ? (
+              <div className="flex gap-4 overflow-x-auto pb-3 -mx-2 px-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex-shrink-0 w-36">
+                    <div className="aspect-[2/3] w-36 rounded-xl bg-purple-100 animate-pulse" />
+                    <div className="mt-2 h-3 bg-purple-100 rounded animate-pulse w-3/4" />
+                    <div className="mt-1 h-2 bg-purple-50 rounded animate-pulse w-1/2" />
+                  </div>
+                ))}
+              </div>
+            ) : recommendations.length > 0 ? (
+              <div className="flex gap-4 overflow-x-auto pb-3 -mx-2 px-2">
+                {recommendations.map((book) => (
+                  <QuizResultCard key={book.id} book={book} onClick={handleSelectBook} />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No recommendations found. Try again with different answers!</p>
+              </div>
+            )}
+
             <div className="flex items-center gap-4 mt-5 pt-4 border-t border-purple-100">
               <button
                 onClick={reset}
@@ -229,7 +347,7 @@ export default function BookQuiz({ onSelectBook }: { onSelectBook: (book: Book) 
   );
 }
 
-function QuizResultCard({ book, onClick }: { book: Book; onClick: (book: Book) => void }) {
+function QuizResultCard({ book, onClick }: { book: QuizBook; onClick: (book: QuizBook) => void }) {
   const [imgErr, setImgErr] = useState(false);
   return (
     <button
@@ -237,7 +355,7 @@ function QuizResultCard({ book, onClick }: { book: Book; onClick: (book: Book) =
       className="flex-shrink-0 w-36 group text-left focus:outline-none"
     >
       <div className="relative aspect-[2/3] w-36 rounded-xl overflow-hidden border-2 border-purple-100 shadow-md group-hover:shadow-xl group-hover:border-purple-300 transition-all">
-        {!imgErr ? (
+        {book.coverUrl && !imgErr ? (
           <Image
             src={book.coverUrl}
             alt={book.title}

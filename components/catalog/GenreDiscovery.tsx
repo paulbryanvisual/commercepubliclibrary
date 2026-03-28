@@ -1,8 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Image from "next/image";
-import { books, type Book, type Genre } from "@/lib/catalog/books";
+import { type Genre } from "@/lib/catalog/books";
+
+/** Lightweight book shape for surprise picks (from API) */
+interface SurpriseBook {
+  id: number;
+  title: string;
+  author: string | null;
+  coverUrl: string | null;
+  genre: string;
+  isbn: string | null;
+  year: number | null;
+  subjects: string[];
+  description: string | null;
+  openLibraryKey: string | null;
+}
+
+/** The shape the parent expects when a book is selected */
+interface BookInfo {
+  title: string;
+  author?: string;
+  year?: number | null;
+  isbn?: string | null;
+  coverUrl?: string | null;
+  subjects?: string[];
+  description?: string;
+  genre?: string;
+  openLibraryKey?: string;
+}
 
 interface GenreTile {
   genre: Genre;
@@ -85,7 +112,7 @@ export default function GenreDiscovery({
   onSelectBook,
 }: {
   onSelectGenre: (genre: Genre) => void;
-  onSelectBook: (book: Book) => void;
+  onSelectBook: (book: BookInfo) => void;
 }) {
   return (
     <div>
@@ -144,24 +171,53 @@ function GenreTileCard({ tile, onClick }: { tile: GenreTile; onClick: () => void
   );
 }
 
-function SurpriseSection({ onSelectBook }: { onSelectBook: (book: Book) => void }) {
-  const [surpriseBook, setSurpriseBook] = useState<Book | null>(null);
+function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => void }) {
+  const [surpriseBook, setSurpriseBook] = useState<SurpriseBook | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
 
-  const handleSurprise = () => {
+  const handleSurprise = useCallback(async () => {
     setIsSpinning(true);
-    // Animate through a few books quickly then land on one
-    let count = 0;
-    const interval = setInterval(() => {
-      const randomBook = books[Math.floor(Math.random() * books.length)];
-      setSurpriseBook(randomBook);
-      count++;
-      if (count >= 8) {
-        clearInterval(interval);
+    try {
+      // Fetch a random batch from the API
+      const res = await fetch(`/api/catalog/browse?genre=all&limit=20&random=true`);
+      const data = await res.json();
+      const books: SurpriseBook[] = data.books || [];
+
+      if (books.length === 0) {
         setIsSpinning(false);
+        return;
       }
-    }, 120);
-  };
+
+      // Animate through books quickly then land on one
+      let count = 0;
+      const interval = setInterval(() => {
+        const randomBook = books[Math.floor(Math.random() * books.length)];
+        setSurpriseBook(randomBook);
+        count++;
+        if (count >= 8) {
+          clearInterval(interval);
+          setIsSpinning(false);
+        }
+      }, 120);
+    } catch {
+      setIsSpinning(false);
+    }
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (!surpriseBook) return;
+    onSelectBook({
+      title: surpriseBook.title,
+      author: surpriseBook.author || undefined,
+      year: surpriseBook.year,
+      isbn: surpriseBook.isbn,
+      coverUrl: surpriseBook.coverUrl,
+      subjects: surpriseBook.subjects,
+      description: surpriseBook.description || undefined,
+      genre: surpriseBook.genre,
+      openLibraryKey: surpriseBook.openLibraryKey || undefined,
+    });
+  }, [surpriseBook, onSelectBook]);
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-gradient-to-r from-amber-50 via-white to-rose-50 p-6 md:p-8">
@@ -203,17 +259,23 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: Book) => void 
         {/* Right - Result */}
         {surpriseBook && (
           <button
-            onClick={() => onSelectBook(surpriseBook)}
+            onClick={handleClick}
             className="flex items-center gap-4 rounded-xl bg-white border border-gray-100 p-4 shadow-sm hover:shadow-md transition-all group max-w-sm"
           >
-            <div className="relative aspect-[2/3] w-16 shrink-0 rounded-lg overflow-hidden">
-              <Image
-                src={surpriseBook.coverUrl}
-                alt={surpriseBook.title}
-                fill
-                sizes="64px"
-                className="object-cover"
-              />
+            <div className="relative aspect-[2/3] w-16 shrink-0 rounded-lg overflow-hidden bg-gray-100">
+              {surpriseBook.coverUrl ? (
+                <Image
+                  src={surpriseBook.coverUrl}
+                  alt={surpriseBook.title}
+                  fill
+                  sizes="64px"
+                  className="object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-100 to-rose-100 p-1">
+                  <span className="text-[9px] font-semibold text-amber-700 text-center line-clamp-3">{surpriseBook.title}</span>
+                </div>
+              )}
             </div>
             <div className="text-left min-w-0">
               <p className="text-xs text-amber-600 font-semibold mb-0.5">Your surprise pick:</p>

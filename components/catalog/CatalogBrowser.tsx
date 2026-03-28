@@ -1,23 +1,36 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
-import {
-  books,
-  genres,
-  getRelatedBooks,
-  type Book,
-  type Genre,
-} from "@/lib/catalog/books";
+import { type Genre } from "@/lib/catalog/books";
 import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
+
+const GENRES: Genre[] = ["Fiction", "Mystery", "Romance", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction"];
+
+interface CatalogBook {
+  id: number;
+  isbn: string | null;
+  title: string;
+  author: string | null;
+  year: number | null;
+  genre: string;
+  description: string | null;
+  subjects: string[];
+  coverUrl: string | null;
+  publisher: string | null;
+  pages: number | null;
+  openLibraryKey: string | null;
+}
 
 // ---------- Genre Filter Pills ----------
 function GenreFilter({
   selected,
   onSelect,
+  counts,
 }: {
-  selected: Genre | null;
+  selected: string | null;
   onSelect: (g: Genre | null) => void;
+  counts?: Record<string, number>;
 }) {
   return (
     <div className="flex flex-wrap gap-2 mb-8">
@@ -29,9 +42,9 @@ function GenreFilter({
             : "bg-white border border-gray-200 text-gray-500 hover:border-primary-border hover:text-primary"
         }`}
       >
-        All
+        All{counts ? ` (${Object.values(counts).reduce((a, b) => a + b, 0)})` : ""}
       </button>
-      {genres.map((g) => (
+      {GENRES.map((g) => (
         <button
           key={g}
           onClick={() => onSelect(g)}
@@ -41,7 +54,7 @@ function GenreFilter({
               : "bg-white border border-gray-200 text-gray-500 hover:border-primary-border hover:text-primary"
           }`}
         >
-          {g}
+          {g}{counts && counts[g] ? ` (${counts[g]})` : ""}
         </button>
       ))}
     </div>
@@ -53,8 +66,8 @@ function BookCard({
   book,
   onClick,
 }: {
-  book: Book;
-  onClick: (book: Book) => void;
+  book: CatalogBook;
+  onClick: (book: CatalogBook) => void;
 }) {
   const [imgError, setImgError] = useState(false);
 
@@ -63,9 +76,8 @@ function BookCard({
       onClick={() => onClick(book)}
       className="group relative flex flex-col text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-xl"
     >
-      {/* Cover image */}
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-100 shadow-sm transition-shadow duration-300 group-hover:shadow-lg">
-        {!imgError ? (
+        {book.coverUrl && !imgError ? (
           <Image
             src={book.coverUrl}
             alt={`Cover of ${book.title}`}
@@ -76,7 +88,7 @@ function BookCard({
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-3 text-center">
-            <span className="text-sm font-semibold text-primary-dark leading-tight">
+            <span className="text-sm font-semibold text-primary-dark leading-tight line-clamp-3">
               {book.title}
             </span>
             <span className="mt-1 text-xs text-primary-mid">{book.author}</span>
@@ -92,7 +104,6 @@ function BookCard({
         </div>
       </div>
 
-      {/* Title below on mobile */}
       <div className="mt-2 sm:hidden">
         <p className="text-xs font-medium text-gray-700 line-clamp-1">{book.title}</p>
         <p className="text-[11px] text-gray-400 line-clamp-1">{book.author}</p>
@@ -101,30 +112,79 @@ function BookCard({
   );
 }
 
-// ---------- Helper: convert Book → BookInfo ----------
-function toBookInfo(book: Book): BookInfo {
+function toBookInfo(book: CatalogBook): BookInfo {
   return {
     title: book.title,
-    author: book.author,
+    author: book.author || undefined,
     year: book.year,
     isbn: book.isbn,
     coverUrl: book.coverUrl,
     subjects: book.subjects,
-    description: book.description,
+    description: book.description || undefined,
     genre: book.genre,
+    openLibraryKey: book.openLibraryKey || undefined,
   };
 }
 
 // ---------- Main CatalogBrowser ----------
 export default function CatalogBrowser({ initialGenre }: { initialGenre?: Genre } = {}) {
-  const [selectedGenre, setSelectedGenre] = useState<Genre | null>(initialGenre || null);
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(initialGenre || null);
+  const [selectedBook, setSelectedBook] = useState<CatalogBook | null>(null);
+  const [books, setBooks] = useState<CatalogBook[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [genreCounts, setGenreCounts] = useState<Record<string, number>>({});
+  const offsetRef = useRef(0);
+  const PAGE_SIZE = 48;
 
-  const filteredBooks = selectedGenre
-    ? books.filter((b) => b.genre === selectedGenre)
-    : books;
+  // Fetch genre counts
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/catalog/genres");
+        if (res.ok) {
+          const data = await res.json();
+          const counts: Record<string, number> = {};
+          for (const g of data.genres || []) counts[g.name] = g.count;
+          setGenreCounts(counts);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
-  const handleSelectBook = useCallback((book: Book) => {
+  // Fetch books when genre changes
+  useEffect(() => {
+    setLoading(true);
+    offsetRef.current = 0;
+
+    const genre = selectedGenre || "all";
+    fetch(`/api/catalog/browse?genre=${genre}&limit=${PAGE_SIZE}&offset=0`)
+      .then((r) => r.json())
+      .then((data) => {
+        setBooks(data.books || []);
+        setTotal(data.total || 0);
+        offsetRef.current = data.books?.length || 0;
+      })
+      .catch(() => setBooks([]))
+      .finally(() => setLoading(false));
+  }, [selectedGenre]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    const genre = selectedGenre || "all";
+    try {
+      const res = await fetch(`/api/catalog/browse?genre=${genre}&limit=${PAGE_SIZE}&offset=${offsetRef.current}`);
+      const data = await res.json();
+      const newBooks: CatalogBook[] = data.books || [];
+      setBooks((prev) => [...prev, ...newBooks]);
+      offsetRef.current += newBooks.length;
+    } catch { /* ignore */ }
+    setLoadingMore(false);
+  }, [selectedGenre, loadingMore]);
+
+  const handleSelectBook = useCallback((book: CatalogBook) => {
     setSelectedBook(book);
   }, []);
 
@@ -132,24 +192,65 @@ export default function CatalogBrowser({ initialGenre }: { initialGenre?: Genre 
     setSelectedBook(null);
   }, []);
 
-  // Get related books for the selected book
-  const related = selectedBook ? getRelatedBooks(selectedBook).map(toBookInfo) : [];
+  const hasMore = books.length < total;
 
   return (
     <section>
-      {!initialGenre && <GenreFilter selected={selectedGenre} onSelect={setSelectedGenre} />}
+      {!initialGenre && (
+        <GenreFilter
+          selected={selectedGenre}
+          onSelect={(g) => setSelectedGenre(g)}
+          counts={genreCounts}
+        />
+      )}
 
-      {/* Book grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-5">
-        {filteredBooks.map((book) => (
-          <BookCard key={book.isbn} book={book} onClick={handleSelectBook} />
-        ))}
-      </div>
-
-      {filteredBooks.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-12 text-center mt-4">
-          <p className="text-gray-500">No books found in this category.</p>
+      {/* Loading skeleton */}
+      {loading ? (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-5">
+          {[...Array(18)].map((_, i) => (
+            <div key={i} className="aspect-[2/3] bg-gray-200 rounded-xl animate-pulse" />
+          ))}
         </div>
+      ) : (
+        <>
+          {/* Book grid */}
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-5">
+            {books.map((book) => (
+              <BookCard key={book.id} book={book} onClick={handleSelectBook} />
+            ))}
+          </div>
+
+          {books.length === 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-12 text-center mt-4">
+              <p className="text-gray-500">No books found in this category.</p>
+            </div>
+          )}
+
+          {/* Load more */}
+          {hasMore && (
+            <div className="flex justify-center mt-8">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-xl border border-gray-200 bg-white px-8 py-3 text-sm font-medium text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {loadingMore ? (
+                  <>
+                    <span className="animate-spin h-4 w-4 rounded-full border-2 border-gray-300 border-t-[#1D9E75]" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    Show More Books
+                    <span className="text-xs text-gray-400">
+                      ({books.length} of {total.toLocaleString()})
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Detail panel */}
@@ -157,14 +258,6 @@ export default function CatalogBrowser({ initialGenre }: { initialGenre?: Genre 
         <BookDetailPanel
           book={toBookInfo(selectedBook)}
           onClose={handleClose}
-          onSelectRelated={(b) => {
-            // Find the matching Book object from our catalog
-            const match = books.find(
-              (bk) => bk.title === b.title || bk.isbn === b.isbn
-            );
-            if (match) handleSelectBook(match);
-          }}
-          relatedBooks={related}
         />
       )}
     </section>

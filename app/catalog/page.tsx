@@ -7,7 +7,7 @@ import CatalogBrowser from "@/components/catalog/CatalogBrowser";
 import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
 import GenreDiscovery from "@/components/catalog/GenreDiscovery";
 import BookQuiz from "@/components/catalog/BookQuiz";
-import { books, type Book, type Genre } from "@/lib/catalog/books";
+import { type Genre } from "@/lib/catalog/books";
 
 interface SearchResult {
   key?: string;
@@ -132,17 +132,8 @@ function CatalogContent() {
   const [browseGenre, setBrowseGenre] = useState<Genre | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleLocalBookClick = useCallback((book: Book) => {
-    setSelectedBook({
-      title: book.title,
-      author: book.author,
-      year: book.year,
-      isbn: book.isbn,
-      coverUrl: book.coverUrl,
-      subjects: book.subjects,
-      description: book.description,
-      genre: book.genre,
-    });
+  const handleLocalBookClick = useCallback((book: BookInfo) => {
+    setSelectedBook(book);
   }, []);
 
   const handleGenreSelect = useCallback((genre: Genre) => {
@@ -363,9 +354,6 @@ function CatalogContent() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <h2 className="text-h2 text-gray-800">{browseGenre}</h2>
-                      <span className="text-sm text-gray-400">
-                        {books.filter((b) => b.genre === browseGenre).length} titles
-                      </span>
                     </div>
                     <button
                       onClick={() => setBrowseGenre(null)}
@@ -383,7 +371,6 @@ function CatalogContent() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-h2 text-gray-800">Full Collection</h2>
-                    <span className="text-sm text-gray-400">30 titles</span>
                   </div>
                   <p className="text-gray-500 mb-6">
                     Click any cover to see details, save to your list, or reserve.
