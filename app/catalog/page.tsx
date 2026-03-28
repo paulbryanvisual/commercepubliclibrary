@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import CatalogBrowser from "@/components/catalog/CatalogBrowser";
+import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
 
 interface SearchResult {
   key?: string;
@@ -19,15 +20,13 @@ interface SearchResult {
   opacUrl?: string;
 }
 
-function SearchResultCard({ result }: { result: SearchResult }) {
+function SearchResultCard({ result, onClick }: { result: SearchResult; onClick: (r: SearchResult) => void }) {
   const [imgError, setImgError] = useState(false);
 
   return (
-    <a
-      href={result.opacUrl || "#"}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
+    <button
+      onClick={() => onClick(result)}
+      className="flex gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow w-full text-left"
     >
       {/* Cover */}
       <div className="relative aspect-[2/3] w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
@@ -82,13 +81,13 @@ function SearchResultCard({ result }: { result: SearchResult }) {
         </div>
       </div>
 
-      {/* OPAC link arrow */}
+      {/* Arrow */}
       <div className="flex items-center text-gray-300">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M9 18l6-6-6-6" />
         </svg>
       </div>
-    </a>
+    </button>
   );
 }
 
@@ -126,7 +125,23 @@ function CatalogContent() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleBookClick = useCallback((result: SearchResult) => {
+    setSelectedBook({
+      title: result.title,
+      author: result.author,
+      year: result.year,
+      isbn: result.isbn,
+      coverUrl: result.coverUrl,
+      subjects: result.subjects,
+      publisher: result.publisher,
+      pages: result.pages,
+      editions: result.editions,
+      openLibraryKey: result.key,
+    });
+  }, []);
 
   // Fetch search results
   const doSearch = useCallback(async (q: string) => {
@@ -282,7 +297,7 @@ function CatalogContent() {
             ) : results.length > 0 ? (
               <div className="space-y-4">
                 {results.map((result, i) => (
-                  <SearchResultCard key={result.key || i} result={result} />
+                  <SearchResultCard key={result.key || i} result={result} onClick={handleBookClick} />
                 ))}
               </div>
             ) : (
@@ -317,6 +332,15 @@ function CatalogContent() {
           </div>
         )}
       </div>
+
+      {/* Book detail panel */}
+      {selectedBook && (
+        <BookDetailPanel
+          book={selectedBook}
+          onClose={() => setSelectedBook(null)}
+          onSelectRelated={(b) => setSelectedBook(b)}
+        />
+      )}
     </>
   );
 }

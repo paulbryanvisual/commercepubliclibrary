@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import Image from "next/image";
 import {
   books,
@@ -9,7 +9,7 @@ import {
   type Book,
   type Genre,
 } from "@/lib/catalog/books";
-import { usePatron } from "@/components/patron/PatronContext";
+import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
 
 // ---------- Genre Filter Pills ----------
 function GenreFilter({
@@ -101,280 +101,18 @@ function BookCard({
   );
 }
 
-// ---------- Related Book Thumbnail ----------
-function RelatedThumb({
-  book,
-  onClick,
-}: {
-  book: Book;
-  onClick: (book: Book) => void;
-}) {
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <button
-      onClick={() => onClick(book)}
-      className="group flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
-    >
-      <div className="relative aspect-[2/3] w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 shadow-sm transition-shadow group-hover:shadow-md">
-        {!imgError ? (
-          <Image
-            src={book.coverUrl}
-            alt={`Cover of ${book.title}`}
-            fill
-            sizes="80px"
-            className="object-cover transition-transform duration-200 group-hover:scale-105"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-1.5 text-center">
-            <span className="text-[10px] font-medium text-primary-dark leading-tight line-clamp-3">
-              {book.title}
-            </span>
-          </div>
-        )}
-      </div>
-      <p className="mt-1 w-20 text-[11px] text-gray-500 line-clamp-1 text-center">
-        {book.title}
-      </p>
-    </button>
-  );
-}
-
-// ---------- Book Detail Panel (slide-over) ----------
-function BookDetailPanel({
-  book,
-  onClose,
-  onSelectBook,
-}: {
-  book: Book;
-  onClose: () => void;
-  onSelectBook: (book: Book) => void;
-}) {
-  const [imgError, setImgError] = useState(false);
-  const [holdStatus, setHoldStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [holdMessage, setHoldMessage] = useState("");
-  const { patron, setShowLoginModal } = usePatron();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const related = getRelatedBooks(book);
-
-  const handlePlaceHold = async () => {
-    if (!patron) {
-      setShowLoginModal(true);
-      return;
-    }
-    setHoldStatus("loading");
-    try {
-      const res = await fetch("/api/patron/hold", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId: book.isbn }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setHoldStatus("success");
-        setHoldMessage(data.message || "Hold placed!");
-      } else {
-        setHoldStatus("error");
-        setHoldMessage(data.message || data.error || "Could not place hold");
-      }
-    } catch {
-      setHoldStatus("error");
-      setHoldMessage("Unable to connect to library system");
-    }
+// ---------- Helper: convert Book → BookInfo ----------
+function toBookInfo(book: Book): BookInfo {
+  return {
+    title: book.title,
+    author: book.author,
+    year: book.year,
+    isbn: book.isbn,
+    coverUrl: book.coverUrl,
+    subjects: book.subjects,
+    description: book.description,
+    genre: book.genre,
   };
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  // Trap focus to panel
-  useEffect(() => {
-    panelRef.current?.focus();
-  }, [book]);
-
-  // Prevent body scroll
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
-        aria-hidden
-      />
-
-      {/* Panel */}
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-label={`Details for ${book.title}`}
-        className="relative z-10 w-full max-w-lg bg-white shadow-2xl overflow-y-auto animate-slide-in-right"
-        style={{
-          animation: "slideInRight 0.3s ease-out forwards",
-        }}
-      >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="sticky top-0 right-0 z-20 float-right m-4 rounded-full bg-white/90 p-2 shadow-md hover:bg-gray-100 transition-colors"
-          aria-label="Close"
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="text-gray-600"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-
-        <div className="p-6 pt-4">
-          {/* Cover */}
-          <div className="flex justify-center mb-6">
-            <div className="relative aspect-[2/3] w-48 overflow-hidden rounded-2xl border border-gray-200 bg-gray-100 shadow-lg">
-              {!imgError ? (
-                <Image
-                  src={book.coverUrl}
-                  alt={`Cover of ${book.title}`}
-                  fill
-                  sizes="192px"
-                  className="object-cover"
-                  priority
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-4 text-center">
-                  <span className="text-base font-semibold text-primary-dark">
-                    {book.title}
-                  </span>
-                  <span className="mt-1 text-sm text-primary-mid">
-                    {book.author}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Title & meta */}
-          <h2 className="text-h2 text-gray-800 text-center">{book.title}</h2>
-          <p className="text-center text-gray-500 mt-1">
-            {book.author} &middot; {book.year}
-          </p>
-
-          {/* Genre badge */}
-          <div className="flex justify-center mt-3">
-            <span className="rounded-full bg-primary-light px-3 py-1 text-xs font-medium text-primary-dark">
-              {book.genre}
-            </span>
-          </div>
-
-          {/* Description */}
-          <p className="mt-6 text-body text-gray-600 leading-relaxed">
-            {book.description}
-          </p>
-
-          {/* Subject tags */}
-          <div className="flex flex-wrap gap-1.5 mt-4">
-            {book.subjects.map((s) => (
-              <span
-                key={s}
-                className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] text-gray-500"
-              >
-                {s}
-              </span>
-            ))}
-          </div>
-
-          {/* Hold status message */}
-          {holdMessage && (
-            <div className={`mt-4 rounded-lg p-3 text-sm ${
-              holdStatus === "success"
-                ? "bg-green-50 border border-green-200 text-green-700"
-                : "bg-red-50 border border-red-200 text-red-700"
-            }`}>
-              {holdMessage}
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={handlePlaceHold}
-              disabled={holdStatus === "loading" || holdStatus === "success"}
-              className="flex-1 rounded-xl bg-primary py-3 text-sm font-medium text-white hover:bg-primary-mid transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {holdStatus === "loading" ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                  </svg>
-                  Placing Hold...
-                </>
-              ) : holdStatus === "success" ? (
-                <>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
-                  Hold Placed!
-                </>
-              ) : (
-                patron ? "Place Hold" : "Sign In to Place Hold"
-              )}
-            </button>
-            <button className="flex-1 rounded-xl border border-blue-200 bg-blue-light py-3 text-sm font-medium text-blue hover:bg-blue-100 transition-colors">
-              Borrow on Libby
-            </button>
-          </div>
-
-          {/* Related books */}
-          {related.length > 0 && (
-            <div className="mt-8 border-t border-gray-200 pt-6">
-              <h3 className="text-h3 text-gray-800 mb-4">You Might Also Like</h3>
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-                {related.map((rb) => (
-                  <RelatedThumb
-                    key={rb.isbn}
-                    book={rb}
-                    onClick={onSelectBook}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Slide-in animation */}
-      <style jsx>{`
-        @keyframes slideInRight {
-          from {
-            transform: translateX(100%);
-          }
-          to {
-            transform: translateX(0);
-          }
-        }
-      `}</style>
-    </div>
-  );
 }
 
 // ---------- Main CatalogBrowser ----------
@@ -393,6 +131,9 @@ export default function CatalogBrowser() {
   const handleClose = useCallback(() => {
     setSelectedBook(null);
   }, []);
+
+  // Get related books for the selected book
+  const related = selectedBook ? getRelatedBooks(selectedBook).map(toBookInfo) : [];
 
   return (
     <section>
@@ -414,9 +155,16 @@ export default function CatalogBrowser() {
       {/* Detail panel */}
       {selectedBook && (
         <BookDetailPanel
-          book={selectedBook}
+          book={toBookInfo(selectedBook)}
           onClose={handleClose}
-          onSelectBook={handleSelectBook}
+          onSelectRelated={(b) => {
+            // Find the matching Book object from our catalog
+            const match = books.find(
+              (bk) => bk.title === b.title || bk.isbn === b.isbn
+            );
+            if (match) handleSelectBook(match);
+          }}
+          relatedBooks={related}
         />
       )}
     </section>

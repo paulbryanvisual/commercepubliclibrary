@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { usePatron } from "@/components/patron/PatronContext";
 import Link from "next/link";
+import Image from "next/image";
 
 interface CheckedOutItem {
   title: string;
@@ -34,7 +35,19 @@ interface AccountData {
   items: CheckedOutItem[];
 }
 
-const tabs = ["Checkouts", "Account Info"] as const;
+interface SavedBook {
+  id: string;
+  title: string;
+  author?: string;
+  isbn?: string;
+  coverUrl?: string;
+  year?: number;
+  subjects?: string[];
+  publisher?: string;
+  savedAt: string;
+}
+
+const tabs = ["Checkouts", "My List", "Account Info"] as const;
 type Tab = (typeof tabs)[number];
 
 function formatDate(dateStr: string) {
@@ -96,6 +109,38 @@ export default function AccountPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Checkouts");
   const [renewingItem, setRenewingItem] = useState<string | null>(null);
   const [renewResult, setRenewResult] = useState<{ barcode: string; ok: boolean; msg: string } | null>(null);
+  const [savedBooks, setSavedBooks] = useState<SavedBook[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [removingBook, setRemovingBook] = useState<string | null>(null);
+
+  const fetchSavedBooks = useCallback(async () => {
+    setSavedLoading(true);
+    try {
+      const res = await fetch("/api/patron/saved-books");
+      if (res.ok) {
+        const data = await res.json();
+        setSavedBooks(data.books || []);
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setSavedLoading(false);
+    }
+  }, []);
+
+  const removeSavedBook = async (id: string) => {
+    setRemovingBook(id);
+    try {
+      const res = await fetch(`/api/patron/saved-books?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setSavedBooks((prev) => prev.filter((b) => b.id !== id));
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setRemovingBook(null);
+    }
+  };
 
   const fetchAccount = useCallback(async () => {
     setIsLoading(true);
@@ -116,8 +161,11 @@ export default function AccountPage() {
   }, []);
 
   useEffect(() => {
-    if (patron) fetchAccount();
-  }, [patron, fetchAccount]);
+    if (patron) {
+      fetchAccount();
+      fetchSavedBooks();
+    }
+  }, [patron, fetchAccount, fetchSavedBooks]);
 
   const handleRenew = async (barcode: string, title: string) => {
     setRenewingItem(barcode);
@@ -350,6 +398,43 @@ export default function AccountPage() {
         </div>
       )}
 
+      {/* ── My List Tab ── */}
+      {!isLoading && activeTab === "My List" && (
+        <div>
+          {savedLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="animate-spin h-6 w-6 rounded-full border-2 border-[#1D9E75] border-t-transparent" />
+            </div>
+          ) : savedBooks.length > 0 ? (
+            <div className="space-y-3">
+              {savedBooks.map((book) => (
+                <SavedBookCard
+                  key={book.id}
+                  book={book}
+                  onRemove={removeSavedBook}
+                  isRemoving={removingBook === book.id}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+              <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-pink-50 flex items-center justify-center">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ec4899" strokeWidth="1.5">
+                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Your reading list is empty</p>
+              <p className="text-xs text-gray-400 mb-4">
+                Save books from the catalog to keep track of what you want to read.
+              </p>
+              <Link href="/catalog" className="text-sm text-[#1D9E75] font-medium hover:underline">
+                Browse the catalog →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Account Info Tab ── */}
       {!isLoading && !fetchError && activeTab === "Account Info" && accountData && (
         <div className="space-y-4">
@@ -479,6 +564,80 @@ function ItemCard({
           "Renew Now"
         ) : (
           "Renew"
+        )}
+      </button>
+    </div>
+  );
+}
+
+function SavedBookCard({
+  book,
+  onRemove,
+  isRemoving,
+}: {
+  book: SavedBook;
+  onRemove: (id: string) => void;
+  isRemoving: boolean;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const opacUrl = `https://commercepubliclibrarytx.booksys.net/opac/cpltx/index.html#search:ExpertSearch?ST0=T&SF0=${encodeURIComponent(book.title)}`;
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm flex gap-4">
+      {/* Cover */}
+      <div className="relative aspect-[2/3] w-16 flex-shrink-0 overflow-hidden rounded-xl bg-gray-100">
+        {book.coverUrl && !imgError ? (
+          <Image
+            src={book.coverUrl}
+            alt={book.title}
+            fill
+            sizes="64px"
+            className="object-cover"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-1.5 text-center">
+            <span className="text-[9px] font-medium text-primary-dark leading-tight line-clamp-3">
+              {book.title}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-800 truncate">{book.title}</p>
+        {book.author && (
+          <p className="text-xs text-gray-400 mt-0.5 truncate">{book.author}</p>
+        )}
+        {book.year && (
+          <p className="text-xs text-gray-400">{book.year}</p>
+        )}
+        <div className="flex items-center gap-2 mt-2">
+          <a
+            href={opacUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-medium text-[#1D9E75] hover:underline"
+          >
+            Reserve in Catalog →
+          </a>
+        </div>
+      </div>
+
+      {/* Remove */}
+      <button
+        onClick={() => onRemove(book.id)}
+        disabled={isRemoving}
+        className="self-start shrink-0 p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+        title="Remove from list"
+      >
+        {isRemoving ? (
+          <span className="animate-spin h-4 w-4 block rounded-full border border-gray-300 border-t-transparent" />
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
         )}
       </button>
     </div>
