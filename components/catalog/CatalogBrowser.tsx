@@ -2,21 +2,35 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import Image from "next/image";
-import {
-  books,
-  genres,
-  getRelatedBooks,
-  type Book,
-  type Genre,
-} from "@/lib/catalog/books";
+import { type Genre } from "@/lib/catalog/books";
+import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
+
+const GENRES: Genre[] = ["Fiction", "Mystery", "Romance", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction"];
+
+interface CatalogBook {
+  id: number;
+  isbn: string | null;
+  title: string;
+  author: string | null;
+  year: number | null;
+  genre: string;
+  description: string | null;
+  subjects: string[];
+  coverUrl: string | null;
+  publisher: string | null;
+  pages: number | null;
+  openLibraryKey: string | null;
+}
 
 // ---------- Genre Filter Pills ----------
 function GenreFilter({
   selected,
   onSelect,
+  counts,
 }: {
-  selected: Genre | null;
+  selected: string | null;
   onSelect: (g: Genre | null) => void;
+  counts?: Record<string, number>;
 }) {
   return (
     <div className="flex flex-wrap gap-2 mb-8">
@@ -28,9 +42,9 @@ function GenreFilter({
             : "bg-white border border-gray-200 text-gray-500 hover:border-primary-border hover:text-primary"
         }`}
       >
-        All
+        All{counts ? ` (${Object.values(counts).reduce((a, b) => a + b, 0)})` : ""}
       </button>
-      {genres.map((g) => (
+      {GENRES.map((g) => (
         <button
           key={g}
           onClick={() => onSelect(g)}
@@ -40,7 +54,7 @@ function GenreFilter({
               : "bg-white border border-gray-200 text-gray-500 hover:border-primary-border hover:text-primary"
           }`}
         >
-          {g}
+          {g}{counts && counts[g] ? ` (${counts[g]})` : ""}
         </button>
       ))}
     </div>
@@ -52,8 +66,8 @@ function BookCard({
   book,
   onClick,
 }: {
-  book: Book;
-  onClick: (book: Book) => void;
+  book: CatalogBook;
+  onClick: (book: CatalogBook) => void;
 }) {
   const [imgError, setImgError] = useState(false);
 
@@ -62,269 +76,115 @@ function BookCard({
       onClick={() => onClick(book)}
       className="group relative flex flex-col text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-xl"
     >
-      {/* Cover image */}
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl border border-gray-200 bg-gray-100 shadow-sm transition-shadow duration-300 group-hover:shadow-lg">
-        {!imgError ? (
+        {book.coverUrl && !imgError ? (
           <Image
             src={book.coverUrl}
             alt={`Cover of ${book.title}`}
             fill
-            sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, (max-width: 1024px) 20vw, 16vw"
+            sizes="(max-width: 640px) 45vw, (max-width: 768px) 30vw, (max-width: 1024px) 22vw, 20vw"
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             onError={() => setImgError(true)}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-3 text-center">
-            <span className="text-sm font-semibold text-primary-dark leading-tight">
+          <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-4 text-center">
+            <span className="text-base font-semibold text-primary-dark leading-tight line-clamp-3">
               {book.title}
             </span>
-            <span className="mt-1 text-xs text-primary-mid">{book.author}</span>
+            <span className="mt-1.5 text-sm text-primary-mid">{book.author}</span>
           </div>
         )}
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 rounded-xl p-3">
-          <span className="text-sm font-semibold text-white leading-tight line-clamp-2">
+        <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 rounded-xl p-4">
+          <span className="text-base font-semibold text-white leading-tight line-clamp-2">
             {book.title}
           </span>
-          <span className="mt-0.5 text-xs text-white/80">{book.author}</span>
+          <span className="mt-1 text-sm text-white/80">{book.author}</span>
         </div>
       </div>
 
-      {/* Title below on mobile */}
-      <div className="mt-2 sm:hidden">
-        <p className="text-xs font-medium text-gray-700 line-clamp-1">{book.title}</p>
-        <p className="text-[11px] text-gray-400 line-clamp-1">{book.author}</p>
+      <div className="mt-2.5">
+        <p className="text-sm font-medium text-gray-700 line-clamp-1">{book.title}</p>
+        <p className="text-xs text-gray-400 line-clamp-1">{book.author}</p>
       </div>
     </button>
   );
 }
 
-// ---------- Related Book Thumbnail ----------
-function RelatedThumb({
-  book,
-  onClick,
-}: {
-  book: Book;
-  onClick: (book: Book) => void;
-}) {
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <button
-      onClick={() => onClick(book)}
-      className="group flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
-    >
-      <div className="relative aspect-[2/3] w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-100 shadow-sm transition-shadow group-hover:shadow-md">
-        {!imgError ? (
-          <Image
-            src={book.coverUrl}
-            alt={`Cover of ${book.title}`}
-            fill
-            sizes="80px"
-            className="object-cover transition-transform duration-200 group-hover:scale-105"
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-1.5 text-center">
-            <span className="text-[10px] font-medium text-primary-dark leading-tight line-clamp-3">
-              {book.title}
-            </span>
-          </div>
-        )}
-      </div>
-      <p className="mt-1 w-20 text-[11px] text-gray-500 line-clamp-1 text-center">
-        {book.title}
-      </p>
-    </button>
-  );
-}
-
-// ---------- Book Detail Panel (slide-over) ----------
-function BookDetailPanel({
-  book,
-  onClose,
-  onSelectBook,
-}: {
-  book: Book;
-  onClose: () => void;
-  onSelectBook: (book: Book) => void;
-}) {
-  const [imgError, setImgError] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const related = getRelatedBooks(book);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  // Trap focus to panel
-  useEffect(() => {
-    panelRef.current?.focus();
-  }, [book]);
-
-  // Prevent body scroll
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
-        aria-hidden
-      />
-
-      {/* Panel */}
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-label={`Details for ${book.title}`}
-        className="relative z-10 w-full max-w-lg bg-white shadow-2xl overflow-y-auto animate-slide-in-right"
-        style={{
-          animation: "slideInRight 0.3s ease-out forwards",
-        }}
-      >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="sticky top-0 right-0 z-20 float-right m-4 rounded-full bg-white/90 p-2 shadow-md hover:bg-gray-100 transition-colors"
-          aria-label="Close"
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="text-gray-600"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-
-        <div className="p-6 pt-4">
-          {/* Cover */}
-          <div className="flex justify-center mb-6">
-            <div className="relative aspect-[2/3] w-48 overflow-hidden rounded-2xl border border-gray-200 bg-gray-100 shadow-lg">
-              {!imgError ? (
-                <Image
-                  src={book.coverUrl}
-                  alt={`Cover of ${book.title}`}
-                  fill
-                  sizes="192px"
-                  className="object-cover"
-                  priority
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-primary-light to-primary-border p-4 text-center">
-                  <span className="text-base font-semibold text-primary-dark">
-                    {book.title}
-                  </span>
-                  <span className="mt-1 text-sm text-primary-mid">
-                    {book.author}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Title & meta */}
-          <h2 className="text-h2 text-gray-800 text-center">{book.title}</h2>
-          <p className="text-center text-gray-500 mt-1">
-            {book.author} &middot; {book.year}
-          </p>
-
-          {/* Genre badge */}
-          <div className="flex justify-center mt-3">
-            <span className="rounded-full bg-primary-light px-3 py-1 text-xs font-medium text-primary-dark">
-              {book.genre}
-            </span>
-          </div>
-
-          {/* Description */}
-          <p className="mt-6 text-body text-gray-600 leading-relaxed">
-            {book.description}
-          </p>
-
-          {/* Subject tags */}
-          <div className="flex flex-wrap gap-1.5 mt-4">
-            {book.subjects.map((s) => (
-              <span
-                key={s}
-                className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[11px] text-gray-500"
-              >
-                {s}
-              </span>
-            ))}
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex gap-3 mt-6">
-            <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-medium text-white hover:bg-primary-mid transition-colors">
-              Place Hold
-            </button>
-            <button className="flex-1 rounded-xl border border-blue-200 bg-blue-light py-3 text-sm font-medium text-blue hover:bg-blue-100 transition-colors">
-              Borrow on Libby
-            </button>
-          </div>
-
-          {/* Related books */}
-          {related.length > 0 && (
-            <div className="mt-8 border-t border-gray-200 pt-6">
-              <h3 className="text-h3 text-gray-800 mb-4">You Might Also Like</h3>
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-                {related.map((rb) => (
-                  <RelatedThumb
-                    key={rb.isbn}
-                    book={rb}
-                    onClick={onSelectBook}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Slide-in animation */}
-      <style jsx>{`
-        @keyframes slideInRight {
-          from {
-            transform: translateX(100%);
-          }
-          to {
-            transform: translateX(0);
-          }
-        }
-      `}</style>
-    </div>
-  );
+function toBookInfo(book: CatalogBook): BookInfo {
+  return {
+    title: book.title,
+    author: book.author || undefined,
+    year: book.year,
+    isbn: book.isbn,
+    coverUrl: book.coverUrl,
+    subjects: book.subjects,
+    description: book.description || undefined,
+    genre: book.genre,
+    openLibraryKey: book.openLibraryKey || undefined,
+  };
 }
 
 // ---------- Main CatalogBrowser ----------
-export default function CatalogBrowser() {
-  const [selectedGenre, setSelectedGenre] = useState<Genre | null>(null);
-  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+export default function CatalogBrowser({ initialGenre }: { initialGenre?: Genre } = {}) {
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(initialGenre || null);
+  const [selectedBook, setSelectedBook] = useState<CatalogBook | null>(null);
+  const [books, setBooks] = useState<CatalogBook[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [genreCounts, setGenreCounts] = useState<Record<string, number>>({});
+  const offsetRef = useRef(0);
+  const PAGE_SIZE = 48;
 
-  const filteredBooks = selectedGenre
-    ? books.filter((b) => b.genre === selectedGenre)
-    : books;
+  // Fetch genre counts
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/catalog/genres");
+        if (res.ok) {
+          const data = await res.json();
+          const counts: Record<string, number> = {};
+          for (const g of data.genres || []) counts[g.name] = g.count;
+          setGenreCounts(counts);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
-  const handleSelectBook = useCallback((book: Book) => {
+  // Fetch books when genre changes
+  useEffect(() => {
+    setLoading(true);
+    offsetRef.current = 0;
+
+    const genre = selectedGenre || "all";
+    fetch(`/api/catalog/browse?genre=${genre}&limit=${PAGE_SIZE}&offset=0`)
+      .then((r) => r.json())
+      .then((data) => {
+        setBooks(data.books || []);
+        setTotal(data.total || 0);
+        offsetRef.current = data.books?.length || 0;
+      })
+      .catch(() => setBooks([]))
+      .finally(() => setLoading(false));
+  }, [selectedGenre]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    const genre = selectedGenre || "all";
+    try {
+      const res = await fetch(`/api/catalog/browse?genre=${genre}&limit=${PAGE_SIZE}&offset=${offsetRef.current}`);
+      const data = await res.json();
+      const newBooks: CatalogBook[] = data.books || [];
+      setBooks((prev) => [...prev, ...newBooks]);
+      offsetRef.current += newBooks.length;
+    } catch { /* ignore */ }
+    setLoadingMore(false);
+  }, [selectedGenre, loadingMore]);
+
+  const handleSelectBook = useCallback((book: CatalogBook) => {
     setSelectedBook(book);
   }, []);
 
@@ -332,29 +192,72 @@ export default function CatalogBrowser() {
     setSelectedBook(null);
   }, []);
 
+  const hasMore = books.length < total;
+
   return (
     <section>
-      <GenreFilter selected={selectedGenre} onSelect={setSelectedGenre} />
+      {!initialGenre && (
+        <GenreFilter
+          selected={selectedGenre}
+          onSelect={(g) => setSelectedGenre(g)}
+          counts={genreCounts}
+        />
+      )}
 
-      {/* Book grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4 md:gap-5">
-        {filteredBooks.map((book) => (
-          <BookCard key={book.isbn} book={book} onClick={handleSelectBook} />
-        ))}
-      </div>
-
-      {filteredBooks.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-12 text-center mt-4">
-          <p className="text-gray-500">No books found in this category.</p>
+      {/* Loading skeleton */}
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5 md:gap-6">
+          {[...Array(15)].map((_, i) => (
+            <div key={i} className="aspect-[2/3] bg-gray-200 rounded-xl animate-pulse" />
+          ))}
         </div>
+      ) : (
+        <>
+          {/* Book grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5 md:gap-6">
+            {books.map((book) => (
+              <BookCard key={book.id} book={book} onClick={handleSelectBook} />
+            ))}
+          </div>
+
+          {books.length === 0 && (
+            <div className="rounded-xl border border-gray-200 bg-white p-12 text-center mt-4">
+              <p className="text-gray-500">No books found in this category.</p>
+            </div>
+          )}
+
+          {/* Load more */}
+          {hasMore && (
+            <div className="flex justify-center mt-8">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-xl border border-gray-200 bg-white px-8 py-3 text-sm font-medium text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75] transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {loadingMore ? (
+                  <>
+                    <span className="animate-spin h-4 w-4 rounded-full border-2 border-gray-300 border-t-[#1D9E75]" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    Show More Books
+                    <span className="text-xs text-gray-400">
+                      ({books.length} of {total.toLocaleString()})
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Detail panel */}
       {selectedBook && (
         <BookDetailPanel
-          book={selectedBook}
+          book={toBookInfo(selectedBook)}
           onClose={handleClose}
-          onSelectBook={handleSelectBook}
         />
       )}
     </section>
