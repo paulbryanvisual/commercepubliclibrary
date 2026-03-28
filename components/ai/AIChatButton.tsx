@@ -56,11 +56,17 @@ export default function AIChatButton() {
           content: m.content,
         }));
 
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
         const res = await fetch("/api/ai/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text.trim(), conversationHistory: history }),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeout);
 
         if (!res.ok) {
           throw new Error("Failed to get response");
@@ -86,20 +92,29 @@ export default function AIChatButton() {
 
           for (const line of lines) {
             if (!line.trim()) continue;
+            let event;
             try {
-              const event = JSON.parse(line);
-              if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
-                fullText += event.delta.text;
-                setMessages((prev) =>
-                  prev.map((m) => (m.id === assistantId ? { ...m, content: fullText } : m))
-                );
-              } else if (event.type === "error") {
-                throw new Error(event.error);
-              }
+              event = JSON.parse(line);
             } catch {
-              // skip
+              continue; // skip malformed JSON lines
+            }
+            if (event.type === "content_block_delta" && event.delta?.type === "text_delta" && event.delta.text) {
+              fullText += event.delta.text;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === assistantId ? { ...m, content: fullText } : m))
+              );
+            } else if (event.type === "error") {
+              reader.cancel();
+              throw new Error(event.error || "AI service error");
             }
           }
+        }
+
+        // If stream completed but no text was received, show fallback
+        if (!fullText.trim()) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantId ? { ...m, content: "I'm sorry, I wasn't able to generate a response. Please try again or call us at (903) 886-6858." } : m))
+          );
         }
       } catch {
         setMessages((prev) => [
