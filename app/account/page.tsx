@@ -4,34 +4,112 @@ import { useState, useEffect, useCallback } from "react";
 import { usePatron } from "@/components/patron/PatronContext";
 import Link from "next/link";
 
-interface AccountData {
-  patron: { name: string; email?: string; phone?: string; cardNumber: string; feeAmount?: string };
-  counts: { holds: number; overdue: number; charged: number; fines: number; unavailableHolds: number };
-  items: { holds: string[]; overdue: string[]; charged: string[]; fines: string[] };
-  screenMessage?: string;
+interface CheckedOutItem {
+  title: string;
+  barcode: string;
+  callNumber: string;
+  dueDate: string;
+  checkoutDate: string;
+  isOverdue: boolean;
+  author: string;
+  materialType: string;
+  renewalCount: string;
+  finesOwed: string;
 }
 
-const tabs = ["Overview", "Checkouts", "Holds", "Fines"] as const;
-type Tab = typeof tabs[number];
+interface AccountData {
+  patron: {
+    name: string;
+    email?: string;
+    phone?: string;
+    cardNumber: string;
+    patronClass?: string;
+    cardExpires?: string;
+    cardExpired?: boolean;
+    isBlocked?: boolean;
+    address?: string;
+  };
+  counts: { itemsOut: number; overdue: number };
+  fines: { total: string; projectedLateFees: string };
+  items: CheckedOutItem[];
+}
+
+const tabs = ["Checkouts", "Account Info"] as const;
+type Tab = (typeof tabs)[number];
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return "";
+  const parts = dateStr.split("/");
+  if (parts.length === 3) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${months[parseInt(parts[0]) - 1]} ${parseInt(parts[1])}, ${parts[2]}`;
+  }
+  return dateStr;
+}
+
+function daysUntilDue(dateStr: string): number {
+  if (!dateStr) return 999;
+  const parts = dateStr.split("/");
+  if (parts.length !== 3) return 999;
+  const due = new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function DueBadge({ dueDate, isOverdue }: { dueDate: string; isOverdue: boolean }) {
+  const days = daysUntilDue(dueDate);
+
+  if (isOverdue || days < 0) {
+    const overdueDays = Math.abs(days);
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4M12 16h.01" />
+        </svg>
+        {overdueDays} day{overdueDays !== 1 ? "s" : ""} overdue
+      </span>
+    );
+  }
+
+  if (days <= 3) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+        Due {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-xs text-gray-500">
+      Due {formatDate(dueDate)}
+    </span>
+  );
+}
 
 export default function AccountPage() {
   const { patron, isLoading: patronLoading, setShowLoginModal, logout } = usePatron();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("Overview");
+  const [fetchError, setFetchError] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>("Checkouts");
   const [renewingItem, setRenewingItem] = useState<string | null>(null);
-  const [renewMessage, setRenewMessage] = useState<string | null>(null);
+  const [renewResult, setRenewResult] = useState<{ barcode: string; ok: boolean; msg: string } | null>(null);
 
   const fetchAccount = useCallback(async () => {
     setIsLoading(true);
+    setFetchError(false);
     try {
       const res = await fetch("/api/patron/account");
       if (res.ok) {
         const data = await res.json();
         setAccountData(data);
+      } else {
+        setFetchError(true);
       }
     } catch {
-      // Error fetching
+      setFetchError(true);
     } finally {
       setIsLoading(false);
     }
@@ -41,123 +119,133 @@ export default function AccountPage() {
     if (patron) fetchAccount();
   }, [patron, fetchAccount]);
 
-  const handleRenew = async (itemId: string) => {
-    setRenewingItem(itemId);
-    setRenewMessage(null);
+  const handleRenew = async (barcode: string, title: string) => {
+    setRenewingItem(barcode);
+    setRenewResult(null);
     try {
       const res = await fetch("/api/patron/renew", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId }),
+        body: JSON.stringify({ itemId: barcode }),
       });
       const data = await res.json();
-      setRenewMessage(data.message || (res.ok ? "Renewed!" : "Could not renew"));
-      if (res.ok) fetchAccount(); // Refresh data
+      setRenewResult({
+        barcode,
+        ok: res.ok,
+        msg: res.ok ? `"${title}" renewed successfully!` : (data.message || "Could not renew this item"),
+      });
+      if (res.ok) fetchAccount();
     } catch {
-      setRenewMessage("Error connecting to library system");
+      setRenewResult({ barcode, ok: false, msg: "Error connecting to library system" });
     } finally {
       setRenewingItem(null);
     }
   };
 
-  // Not logged in state
+  // ── Loading ──
   if (patronLoading) {
     return (
       <div className="mx-auto max-w-site px-4 md:px-8 py-24 text-center">
-        <svg className="animate-spin h-8 w-8 text-primary mx-auto" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-        </svg>
+        <div className="animate-spin h-8 w-8 rounded-full border-2 border-primary border-t-transparent mx-auto" />
       </div>
     );
   }
 
+  // ── Not logged in ──
   if (!patron) {
     return (
-      <div className="mx-auto max-w-site px-4 md:px-8 py-12">
-        <div className="max-w-md mx-auto">
-          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-            <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary-light flex items-center justify-center">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </div>
-            <h1 className="text-xl font-semibold text-gray-800 mb-2">
-              Sign In to Your Account
-            </h1>
-            <p className="text-sm text-gray-500 mb-6">
-              Use your library card barcode and PIN to access your account.
-            </p>
-            <button
-              onClick={() => setShowLoginModal(true)}
-              className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-white hover:bg-primary-mid transition-colors"
-            >
-              Sign In
-            </button>
-            <p className="mt-6 text-xs text-gray-400">
-              Don&apos;t have a card?{" "}
-              <Link href="/get-card" className="text-primary underline">
-                Get one free
-              </Link>
-            </p>
+      <div className="mx-auto max-w-site px-4 md:px-8 py-16">
+        <div className="max-w-sm mx-auto text-center">
+          <div className="mx-auto mb-6 h-20 w-20 rounded-2xl bg-gradient-to-br from-[#e8f5f0] to-[#d0ebe3] flex items-center justify-center">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
           </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">My Account</h1>
+          <p className="text-gray-500 mb-8">
+            Sign in to view your checkouts, holds, and account details.
+          </p>
+          <button
+            onClick={() => setShowLoginModal(true)}
+            className="w-full rounded-xl bg-[#1D9E75] py-3.5 text-sm font-semibold text-white hover:bg-[#178a65] transition-colors shadow-lg shadow-[#1D9E75]/25"
+          >
+            Sign In with Library Card
+          </button>
+          <p className="mt-8 text-sm text-gray-400">
+            Don&apos;t have a library card?{" "}
+            <Link href="/get-card" className="text-[#1D9E75] font-medium hover:underline">
+              Apply for one free →
+            </Link>
+          </p>
         </div>
       </div>
     );
   }
 
-  // Logged in
-  const counts = accountData?.counts;
-  const items = accountData?.items;
+  // ── Logged in ──
+  const overdueItems = accountData?.items.filter((i) => i.isOverdue) || [];
+  const currentItems = accountData?.items.filter((i) => !i.isOverdue) || [];
+  const firstName = patron.name.split(/[\s,]+/).filter(Boolean)[patron.name.includes(",") ? 1 : 0] || patron.name;
 
   return (
-    <div className="mx-auto max-w-site px-4 md:px-8 py-12">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+    <div className="mx-auto max-w-4xl px-4 md:px-8 py-8 md:py-12">
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between mb-8">
         <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-lg font-bold text-white">
-              {patron.name.charAt(0).toUpperCase()}
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#1D9E75] to-[#114d3e] flex items-center justify-center shadow-lg shadow-[#1D9E75]/20">
+            <span className="text-xl font-bold text-white">
+              {firstName.charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-gray-800">{patron.name}</h1>
-            <p className="text-sm text-gray-500">Card: {patron.cardNumber}</p>
+            <h1 className="text-xl font-bold text-gray-800">
+              Welcome, {firstName}
+            </h1>
+            <p className="text-sm text-gray-400 mt-0.5">
+              Card ending in ...{patron.cardNumber.slice(-4)}
+            </p>
           </div>
         </div>
         <button
           onClick={logout}
-          className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+          className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-all"
         >
           Sign Out
         </button>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {[
-          { label: "Checked Out", value: counts?.charged ?? "—", color: "text-primary" },
-          { label: "On Hold", value: counts?.holds ?? "—", color: "text-blue" },
-          { label: "Overdue", value: counts?.overdue ?? "—", color: counts?.overdue ? "text-red" : "text-green-500" },
-          { label: "Fines", value: accountData?.patron.feeAmount || "$0.00", color: "text-gray-600" },
-        ].map((card) => (
-          <div key={card.label} className="rounded-xl border border-gray-200 bg-white p-4 text-center">
-            <p className={`text-2xl font-semibold ${card.color}`}>{card.value}</p>
-            <p className="text-xs text-gray-500 mt-1">{card.label}</p>
-          </div>
-        ))}
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-3 gap-3 md:gap-4 mb-8">
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 md:p-5 shadow-sm">
+          <p className="text-2xl md:text-3xl font-bold text-[#1D9E75]">
+            {accountData?.counts.itemsOut ?? "—"}
+          </p>
+          <p className="text-xs md:text-sm text-gray-500 mt-1">Checked Out</p>
+        </div>
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 md:p-5 shadow-sm">
+          <p className={`text-2xl md:text-3xl font-bold ${(accountData?.counts.overdue ?? 0) > 0 ? "text-red-600" : "text-gray-300"}`}>
+            {accountData?.counts.overdue ?? "—"}
+          </p>
+          <p className="text-xs md:text-sm text-gray-500 mt-1">Overdue</p>
+        </div>
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 md:p-5 shadow-sm">
+          <p className="text-2xl md:text-3xl font-bold text-gray-800">
+            {accountData?.fines.total || "$0.00"}
+          </p>
+          <p className="text-xs md:text-sm text-gray-500 mt-1">Fines</p>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 overflow-x-auto border-b border-gray-200">
+      {/* ── Tabs ── */}
+      <div className="flex gap-1 mb-6 border-b border-gray-200">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab
-                ? "border-primary text-primary"
+                ? "border-[#1D9E75] text-[#1D9E75]"
                 : "border-transparent text-gray-400 hover:text-gray-600"
             }`}
           >
@@ -166,164 +254,246 @@ export default function AccountPage() {
         ))}
       </div>
 
-      {/* Loading state */}
+      {/* ── Loading ── */}
       {isLoading && (
-        <div className="flex items-center justify-center py-12">
-          <svg className="animate-spin h-6 w-6 text-primary" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-          </svg>
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-spin h-6 w-6 rounded-full border-2 border-[#1D9E75] border-t-transparent" />
         </div>
       )}
 
-      {/* Renew message */}
-      {renewMessage && (
-        <div className="rounded-lg bg-primary-light border border-primary-border p-3 mb-4 text-sm text-primary-dark flex items-center justify-between">
-          {renewMessage}
-          <button onClick={() => setRenewMessage(null)} className="text-primary hover:underline text-xs">
-            Dismiss
+      {/* ── Fetch Error ── */}
+      {fetchError && !isLoading && (
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-6 text-center">
+          <p className="text-sm text-amber-800 mb-3">Unable to load account details right now.</p>
+          <button
+            onClick={fetchAccount}
+            className="text-sm font-medium text-amber-700 underline hover:no-underline"
+          >
+            Try again
           </button>
         </div>
       )}
 
-      {/* Tab content */}
-      {!isLoading && (
-        <>
-          {/* Overview / Checkouts */}
-          {(activeTab === "Overview" || activeTab === "Checkouts") && (
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">
-                {activeTab === "Overview" ? "Current Checkouts" : "All Checkouts"}
+      {/* ── Renew result toast ── */}
+      {renewResult && (
+        <div
+          className={`rounded-xl p-4 mb-5 flex items-center justify-between text-sm ${
+            renewResult.ok
+              ? "bg-green-50 border border-green-100 text-green-800"
+              : "bg-red-50 border border-red-100 text-red-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {renewResult.ok ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+              </svg>
+            )}
+            {renewResult.msg}
+          </div>
+          <button onClick={() => setRenewResult(null)} className="text-xs opacity-60 hover:opacity-100">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ── Checkouts Tab ── */}
+      {!isLoading && !fetchError && activeTab === "Checkouts" && (
+        <div className="space-y-6">
+          {/* Overdue section */}
+          {overdueItems.length > 0 && (
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-red-700 mb-3 uppercase tracking-wider">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+                </svg>
+                Overdue ({overdueItems.length})
               </h2>
-              {items?.charged && items.charged.length > 0 ? (
-                items.charged.map((item, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-14 w-10 shrink-0 rounded bg-gradient-to-br from-primary-light to-primary-border flex items-center justify-center">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D9E75" strokeWidth="2">
-                          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">{item}</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleRenew(item)}
-                      disabled={renewingItem === item}
-                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-primary-border hover:text-primary transition-colors disabled:opacity-50"
-                    >
-                      {renewingItem === item ? "Renewing..." : "Renew"}
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-                  <p className="text-sm text-gray-400">No items checked out</p>
-                </div>
-              )}
-
-              {/* Also show overdue on overview */}
-              {activeTab === "Overview" && items?.overdue && items.overdue.length > 0 && (
-                <>
-                  <h2 className="text-lg font-semibold text-red mt-6 mb-3">Overdue Items</h2>
-                  {items.overdue.map((item, i) => (
-                    <div
-                      key={i}
-                      className="rounded-xl border border-red-100 bg-red-50 p-4 flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="h-14 w-10 shrink-0 rounded bg-red-100 flex items-center justify-center">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <path d="M12 8v4M12 16h.01" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">{item}</p>
-                          <p className="text-xs text-red font-medium">OVERDUE</p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleRenew(item)}
-                        disabled={renewingItem === item}
-                        className="rounded-lg bg-red text-white px-3 py-1.5 text-xs font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
-                      >
-                        {renewingItem === item ? "Renewing..." : "Renew Now"}
-                      </button>
-                    </div>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Holds */}
-          {activeTab === "Holds" && (
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Your Holds</h2>
-              {items?.holds && items.holds.length > 0 ? (
-                items.holds.map((item, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-blue-100 bg-blue-50 p-4 flex items-center gap-3"
-                  >
-                    <div className="h-14 w-10 shrink-0 rounded bg-blue-100 flex items-center justify-center">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                        <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                      </svg>
-                    </div>
-                    <p className="text-sm font-medium text-gray-800">{item}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-                  <p className="text-sm text-gray-400">No holds placed</p>
-                  <Link
-                    href="/catalog"
-                    className="mt-3 inline-block text-sm text-primary font-medium hover:underline"
-                  >
-                    Browse the catalog →
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Fines */}
-          {activeTab === "Fines" && (
-            <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Fines & Fees</h2>
-              <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
-                <p className="text-3xl font-bold text-gray-800 mb-1">
-                  {accountData?.patron.feeAmount || "$0.00"}
-                </p>
-                <p className="text-sm text-gray-500">Current balance</p>
-                {items?.fines && items.fines.length > 0 && (
-                  <div className="mt-4 text-left space-y-2">
-                    {items.fines.map((item, i) => (
-                      <div key={i} className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="space-y-2">
+                {overdueItems.map((item) => (
+                  <ItemCard key={item.barcode} item={item} onRenew={handleRenew} renewingItem={renewingItem} variant="overdue" />
+                ))}
               </div>
             </div>
           )}
-        </>
-      )}
 
-      {/* Screen message from SIP2 */}
-      {accountData?.screenMessage && (
-        <div className="mt-6 rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm text-gray-600">
-          {accountData.screenMessage}
+          {/* Current checkouts */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wider">
+              {overdueItems.length > 0 ? "Current" : "Checked Out"} ({currentItems.length})
+            </h2>
+            {currentItems.length > 0 ? (
+              <div className="space-y-2">
+                {currentItems.map((item) => (
+                  <ItemCard key={item.barcode} item={item} onRenew={handleRenew} renewingItem={renewingItem} variant="normal" />
+                ))}
+              </div>
+            ) : accountData && overdueItems.length === 0 ? (
+              <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm">
+                <div className="mx-auto mb-4 h-14 w-14 rounded-2xl bg-gray-50 flex items-center justify-center">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
+                    <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+                  </svg>
+                </div>
+                <p className="text-sm text-gray-500 mb-1">No items checked out</p>
+                <Link href="/catalog" className="text-sm text-[#1D9E75] font-medium hover:underline">
+                  Browse the catalog →
+                </Link>
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
+
+      {/* ── Account Info Tab ── */}
+      {!isLoading && !fetchError && activeTab === "Account Info" && accountData && (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+            <div className="divide-y divide-gray-50">
+              <InfoRow label="Full Name" value={accountData.patron.name} />
+              <InfoRow label="Card Number" value={accountData.patron.cardNumber} />
+              <InfoRow label="Email" value={accountData.patron.email} />
+              <InfoRow label="Phone" value={accountData.patron.phone} />
+              <InfoRow label="Address" value={accountData.patron.address} />
+              <InfoRow label="Patron Type" value={accountData.patron.patronClass} />
+              <InfoRow
+                label="Card Expires"
+                value={accountData.patron.cardExpires ? formatDate(accountData.patron.cardExpires) : undefined}
+                warn={accountData.patron.cardExpired}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Need to make changes?</h3>
+            <p className="text-sm text-gray-500 mb-2">
+              Visit the library or call us to update your address, phone, email, or reset your password.
+            </p>
+            <div className="flex flex-wrap gap-3 mt-4">
+              <a
+                href="tel:9038866858"
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+                </svg>
+                (903) 886-6858
+              </a>
+              <a
+                href="mailto:director@commercepubliclibrary.org"
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                Email Us
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Subcomponents ── */
+
+function ItemCard({
+  item,
+  onRenew,
+  renewingItem,
+  variant,
+}: {
+  item: CheckedOutItem;
+  onRenew: (barcode: string, title: string) => void;
+  renewingItem: string | null;
+  variant: "overdue" | "normal";
+}) {
+  const isOverdue = variant === "overdue";
+  return (
+    <div
+      className={`rounded-2xl border p-4 md:p-5 flex flex-col sm:flex-row sm:items-center gap-4 transition-colors ${
+        isOverdue
+          ? "border-red-100 bg-red-50/50"
+          : "border-gray-100 bg-white shadow-sm"
+      }`}
+    >
+      {/* Book icon */}
+      <div
+        className={`hidden sm:flex h-14 w-10 shrink-0 rounded-lg items-center justify-center ${
+          isOverdue ? "bg-red-100" : "bg-gradient-to-br from-[#e8f5f0] to-[#d0ebe3]"
+        }`}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={isOverdue ? "#dc2626" : "#1D9E75"}
+          strokeWidth="1.5"
+        >
+          <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+        </svg>
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-gray-800 truncate">{item.title}</p>
+        {item.author && (
+          <p className="text-xs text-gray-400 mt-0.5 truncate">{item.author.replace(/,\s*$/, "")}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <DueBadge dueDate={item.dueDate} isOverdue={item.isOverdue} />
+          {item.materialType && item.materialType !== "Book" && (
+            <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{item.materialType}</span>
+          )}
+          {parseInt(item.renewalCount) > 0 && (
+            <span className="text-xs text-gray-400">Renewed {item.renewalCount}×</span>
+          )}
+        </div>
+      </div>
+
+      {/* Renew button */}
+      <button
+        onClick={() => onRenew(item.barcode, item.title)}
+        disabled={renewingItem === item.barcode}
+        className={`shrink-0 rounded-xl px-4 py-2 text-xs font-semibold transition-all disabled:opacity-50 ${
+          isOverdue
+            ? "bg-red-600 text-white hover:bg-red-700 shadow-sm"
+            : "border border-gray-200 text-gray-600 hover:border-[#1D9E75] hover:text-[#1D9E75]"
+        }`}
+      >
+        {renewingItem === item.barcode ? (
+          <span className="flex items-center gap-1.5">
+            <span className="animate-spin h-3 w-3 rounded-full border border-current border-t-transparent" />
+            Renewing
+          </span>
+        ) : isOverdue ? (
+          "Renew Now"
+        ) : (
+          "Renew"
+        )}
+      </button>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, warn }: { label: string; value?: string; warn?: boolean }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-center justify-between px-5 py-3.5">
+      <span className="text-sm text-gray-500">{label}</span>
+      <span className={`text-sm font-medium ${warn ? "text-red-600" : "text-gray-800"}`}>
+        {value}
+        {warn && " (Expired)"}
+      </span>
     </div>
   );
 }

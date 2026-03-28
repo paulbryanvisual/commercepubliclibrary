@@ -7,11 +7,10 @@ export interface PatronData {
   email?: string;
   phone?: string;
   cardNumber: string;
-  holdItems?: number;
   overdueItems?: number;
   chargedItems?: number;
-  fineItems?: number;
   feeAmount?: string;
+  cardExpires?: string;
 }
 
 interface PatronContextValue {
@@ -75,7 +74,7 @@ export function PatronProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Login failed");
+        setError(data.message || data.error || "Login failed");
         return false;
       }
       setPatron(data.patron);
