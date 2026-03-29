@@ -23,8 +23,13 @@ export async function GET(req: NextRequest) {
       .from("catalog_books")
       .select("*", { count: "exact" });
 
-    // Genre filter
-    if (genre && genre !== "all") {
+    // Genre filter — "Spanish" is a virtual genre based on subjects
+    if (genre === "Spanish") {
+      // Match books with Spanish-language subject tags
+      query = query.or(
+        "subjects.cs.{Spanish language materials},subjects.cs.{Spanish language},subjects.cs.{Ficción},subjects.cs.{novela},subjects.cs.{español}"
+      );
+    } else if (genre && genre !== "all") {
       query = query.eq("genre", genre);
     }
 
@@ -39,7 +44,11 @@ export async function GET(req: NextRequest) {
       let countQuery = supabase
         .from("catalog_books")
         .select("*", { count: "exact", head: true });
-      if (genre && genre !== "all") {
+      if (genre === "Spanish") {
+        countQuery = countQuery.or(
+          "subjects.cs.{Spanish language materials},subjects.cs.{Spanish language},subjects.cs.{Ficción},subjects.cs.{novela},subjects.cs.{español}"
+        );
+      } else if (genre && genre !== "all") {
         countQuery = countQuery.eq("genre", genre);
       }
       const { count: totalCount } = await countQuery;

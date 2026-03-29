@@ -5,7 +5,7 @@ import Image from "next/image";
 import { type Genre } from "@/lib/catalog/books";
 import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
 
-const GENRES: Genre[] = ["Fiction", "Mystery", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction"];
+const GENRES: (Genre | "Spanish")[] = ["Fiction", "Mystery", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction", "Spanish"];
 
 interface CatalogBook {
   id: number;
@@ -29,7 +29,7 @@ function GenreFilter({
   counts,
 }: {
   selected: string | null;
-  onSelect: (g: Genre | null) => void;
+  onSelect: (g: string | null) => void;
   counts?: Record<string, number>;
 }) {
   return (
@@ -114,6 +114,7 @@ function BookCard({
 
 function toBookInfo(book: CatalogBook): BookInfo {
   return {
+    id: book.id,
     title: book.title,
     author: book.author || undefined,
     year: book.year,
@@ -127,7 +128,7 @@ function toBookInfo(book: CatalogBook): BookInfo {
 }
 
 // ---------- Main CatalogBrowser ----------
-export default function CatalogBrowser({ initialGenre }: { initialGenre?: Genre } = {}) {
+export default function CatalogBrowser({ initialGenre }: { initialGenre?: string } = {}) {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(initialGenre || null);
   const [selectedBook, setSelectedBook] = useState<CatalogBook | null>(null);
   const [books, setBooks] = useState<CatalogBook[]>([]);

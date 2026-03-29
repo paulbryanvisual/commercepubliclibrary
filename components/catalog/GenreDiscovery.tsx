@@ -97,13 +97,21 @@ const genreTiles: GenreTile[] = [
     imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop&q=80",
     description: "Expand your mind",
   },
+  {
+    genre: "Spanish" as Genre,
+    label: "En Español",
+    emoji: "🇲🇽",
+    gradient: "from-red-600 to-yellow-600",
+    imageUrl: "https://images.unsplash.com/photo-1551029506-0807df4e2031?w=600&h=400&fit=crop&q=80",
+    description: "Libros en español",
+  },
 ];
 
 export default function GenreDiscovery({
   onSelectGenre,
   onSelectBook,
 }: {
-  onSelectGenre: (genre: Genre) => void;
+  onSelectGenre: (genre: string) => void;
   onSelectBook: (book: BookInfo) => void;
 }) {
   return (
