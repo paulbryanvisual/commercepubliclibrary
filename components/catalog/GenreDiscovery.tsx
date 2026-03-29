@@ -3,7 +3,6 @@
 import { useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { type Genre } from "@/lib/catalog/books";
-import { proxyCoverUrl } from "@/lib/catalog/cover-proxy";
 
 /** Lightweight book shape for surprise picks (from API) */
 interface SurpriseBook {
