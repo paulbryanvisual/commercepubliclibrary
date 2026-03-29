@@ -66,10 +66,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // Follow redirects (Open Library 302s to IA servers for real covers)
     const response = await fetch(url, {
       headers: {
         "User-Agent": "CommercePublicLibrary/1.0",
       },
+      redirect: "follow",
       signal: AbortSignal.timeout(10000),
     });
 
@@ -88,6 +90,20 @@ export async function GET(req: NextRequest) {
     }
 
     const buffer = await response.arrayBuffer();
+
+    // Open Library returns a tiny ~43-byte transparent GIF for missing covers
+    // instead of a 404. Detect this and return 404 so clients show a fallback.
+    if (buffer.byteLength < 1000) {
+      return NextResponse.json(
+        { error: "No cover available" },
+        {
+          status: 404,
+          headers: {
+            "Cache-Control": "public, max-age=86400, s-maxage=86400",
+          },
+        }
+      );
+    }
 
     // Store in memory cache
     memoryCache.set(url, { buffer, contentType, timestamp: Date.now() });

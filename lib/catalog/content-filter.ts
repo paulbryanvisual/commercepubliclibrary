@@ -153,19 +153,43 @@ const BANNED_TITLES: Set<string> = new Set([
 // ---------- NSFW subject / keyword detection ----------
 // If a book's subjects contain any of these, it's hidden from browse.
 const NSFW_SUBJECT_KEYWORDS: string[] = [
-  "erotica",
-  "erotic fiction",
-  "erotic romance",
-  "pornography",
-  "adult romance",
+  "erotic",          // catches erotica, erotic fiction, erotic literature, erotic stories, etc.
+  "pornograph",      // pornography, pornographic
   "sexual content",
-  "explicit",
-  "bdsm",
+  "sexual dominance",
   "sexual fantasy",
   "sexual fiction",
+  "sexual intercourse",
+  "sexual behavior",
+  "bdsm",
+  "sadomasoquismo",  // Spanish BDSM tag from Open Library
+  "bodice_ripper",
+  "bodice ripper",
+  "sex addiction",
+  "prostitut",       // prostitution, prostitutes
 ];
 
+// ---------- Flagged book IDs (suggestive covers, manually reviewed) ----------
+// These books have covers that are sexually suggestive / not family-friendly.
+// They are hidden from browse but remain searchable.
+const FLAGGED_BOOK_IDS: Set<number> = new Set([
+  238,   // "Shady" by Dell Banks — suggestive cover
+  192,   // "Hotel Reve Noir" — erotica
+  267,   // "Memoirs of Fanny Hill" — erotica
+  1124,  // "My Secret Life" — erotica/pornography
+  963,   // "The Man Within (Feline Breeds)" — erotic romance
+  659,   // "Lady Chatterley's Lover" — suggestive cover
+  106,   // "Shades of Grey" — erotica
+]);
+
 // ---------- Public API ----------
+
+// ---------- Genres hidden from browse/discovery ----------
+// Romance covers are frequently suggestive; hide the entire genre from
+// the public browse page. Patrons can still find them via search.
+const HIDDEN_BROWSE_GENRES: Set<string> = new Set([
+  "romance",
+]);
 
 /**
  * Returns true if the book should be hidden from browse/discovery.
@@ -174,7 +198,15 @@ const NSFW_SUBJECT_KEYWORDS: string[] = [
 export function shouldFilterBook(
   title: string,
   subjects?: string[],
+  genre?: string,
+  id?: number,
 ): boolean {
+  // Check flagged book IDs (manually reviewed suggestive covers, etc.)
+  if (id !== undefined && FLAGGED_BOOK_IDS.has(id)) return true;
+
+  // Check hidden genres
+  if (genre && HIDDEN_BROWSE_GENRES.has(genre.toLowerCase())) return true;
+
   // Check banned title list
   const normalizedTitle = title.toLowerCase().trim();
   if (BANNED_TITLES.has(normalizedTitle)) return true;
@@ -201,8 +233,8 @@ export function shouldFilterBook(
  * Filter an array of books, removing those that should be hidden.
  * T must have at least { title: string; subjects?: string[] }.
  */
-export function filterBooks<T extends { title: string; subjects?: string[] }>(
+export function filterBooks<T extends { title: string; subjects?: string[]; genre?: string; id?: number }>(
   books: T[],
 ): T[] {
-  return books.filter((b) => !shouldFilterBook(b.title, b.subjects));
+  return books.filter((b) => !shouldFilterBook(b.title, b.subjects, b.genre, b.id));
 }
