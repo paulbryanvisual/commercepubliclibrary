@@ -17,6 +17,7 @@ export const supabase = new Proxy({} as SupabaseClient, {
         },
       });
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const value = (_supabase as any)[prop];
     return typeof value === "function" ? value.bind(_supabase) : value;
   },
