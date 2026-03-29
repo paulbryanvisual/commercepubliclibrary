@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
 import { type Genre } from "@/lib/catalog/books";
 
@@ -56,14 +56,6 @@ const genreTiles: GenreTile[] = [
     gradient: "from-slate-700 to-gray-900",
     imageUrl: "https://images.unsplash.com/photo-1587876931567-564ce588bfbd?w=600&h=400&fit=crop&q=80",
     description: "Twists you won't see coming",
-  },
-  {
-    genre: "Romance",
-    label: "Romance",
-    emoji: "💕",
-    gradient: "from-rose-500 to-pink-600",
-    imageUrl: "https://images.unsplash.com/photo-1474552226712-ac0f0961a954?w=600&h=400&fit=crop&q=80",
-    description: "Love stories that linger",
   },
   {
     genre: "Sci-Fi",
@@ -173,8 +165,31 @@ function GenreTileCard({ tile, onClick }: { tile: GenreTile; onClick: () => void
 
 /** Width of each book card + gap in the roulette strip */
 const CARD_W = 108; // 96px card + 12px gap
+/** Optimized cover dimensions for roulette cards (96×144 @ 2x) */
+const COVER_W = 192;
+const COVER_H = 288;
+
+/**
+ * Build a Next.js /_next/image optimized URL so the browser fetches a
+ * properly sized image instead of the full-res Open Library cover.
+ */
+function optimizedCoverSrc(coverUrl: string): string {
+  return `/_next/image?url=${encodeURIComponent(coverUrl)}&w=${COVER_W}&q=75`;
+}
+
+/** Prefetch an array of image URLs into the browser cache */
+function prefetchImages(urls: string[]) {
+  urls.forEach((url) => {
+    const link = document.createElement("link");
+    link.rel = "prefetch";
+    link.as = "image";
+    link.href = url;
+    document.head.appendChild(link);
+  });
+}
 
 function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => void }) {
+  const [preloadedBooks, setPreloadedBooks] = useState<SurpriseBook[]>([]);
   const [rouletteBooks, setRouletteBooks] = useState<SurpriseBook[]>([]);
   const [surpriseBook, setSurpriseBook] = useState<SurpriseBook | null>(null);
   const [phase, setPhase] = useState<"idle" | "spinning" | "landed">("idle");
@@ -182,42 +197,83 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
   const [winnerIdx, setWinnerIdx] = useState(0);
   const stripRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasFetched = useRef(false);
 
-  const handleSurprise = useCallback(async () => {
-    setPhase("spinning");
-    setSurpriseBook(null);
-    setStripOffset(0);
-    try {
-      const res = await fetch(`/api/catalog/browse?genre=all&limit=20&random=true`);
-      const data = await res.json();
-      const books: SurpriseBook[] = data.books || [];
+  // Preload books + images on mount so the spin is instant
+  useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+
+    fetch(`/api/catalog/browse?genre=all&limit=20&random=true`)
+      .then((r) => r.json())
+      .then((data) => {
+        const books: SurpriseBook[] = data.books || [];
+        if (books.length === 0) return;
+        setPreloadedBooks(books);
+
+        // Prefetch optimised cover images into browser cache
+        const coverUrls = books
+          .map((b) => b.coverUrl)
+          .filter(Boolean)
+          .map((url) => optimizedCoverSrc(url!));
+        prefetchImages(coverUrls);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSurprise = useCallback(() => {
+    // If we have preloaded books use them; otherwise fetch fresh
+    const startSpin = (books: SurpriseBook[]) => {
       if (books.length === 0) { setPhase("idle"); return; }
 
-      // Triple the array so the strip can travel far
       const tripled = [...books, ...books, ...books];
       setRouletteBooks(tripled);
+      setStripOffset(0);
 
-      // Pick a winner in the middle copy so we scroll past the first set
       const winner = books.length + Math.floor(Math.random() * books.length);
       setWinnerIdx(winner);
 
-      // Use requestAnimationFrame to set the final offset after the strip renders at 0
+      // Double-rAF so the strip renders at offset 0 first, then transitions
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setStripOffset(winner * CARD_W);
         });
       });
 
-      // Land after the CSS transition finishes (~3.5s)
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         setSurpriseBook(books[winner % books.length]);
         setPhase("landed");
+
+        // Pre-fetch a fresh batch for next spin
+        fetch(`/api/catalog/browse?genre=all&limit=20&random=true`)
+          .then((r) => r.json())
+          .then((data) => {
+            const fresh: SurpriseBook[] = data.books || [];
+            if (fresh.length > 0) {
+              setPreloadedBooks(fresh);
+              const urls = fresh.map((b) => b.coverUrl).filter(Boolean).map((u) => optimizedCoverSrc(u!));
+              prefetchImages(urls);
+            }
+          })
+          .catch(() => {});
       }, 3600);
-    } catch {
-      setPhase("idle");
+    };
+
+    setPhase("spinning");
+    setSurpriseBook(null);
+
+    if (preloadedBooks.length > 0) {
+      // Instant — images already cached
+      startSpin(preloadedBooks);
+    } else {
+      // Fallback: fetch now
+      fetch(`/api/catalog/browse?genre=all&limit=20&random=true`)
+        .then((r) => r.json())
+        .then((data) => startSpin(data.books || []))
+        .catch(() => setPhase("idle"));
     }
-  }, []);
+  }, [preloadedBooks]);
 
   const handleClick = useCallback(() => {
     if (!surpriseBook) return;
@@ -351,9 +407,11 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
                         <Image
                           src={book.coverUrl}
                           alt={book.title}
-                          fill
+                          width={96}
+                          height={144}
                           sizes="96px"
-                          className="object-cover"
+                          className="object-cover w-full h-full"
+                          loading="eager"
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-amber-100 to-rose-100 p-2">

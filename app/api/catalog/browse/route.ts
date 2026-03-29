@@ -75,9 +75,9 @@ export async function GET(req: NextRequest) {
       openLibraryKey: row.open_library_key,
     }));
 
-    // Filter out banned/NSFW books from browse (they remain searchable)
+    // Filter out banned/NSFW/romance books from browse (they remain searchable)
     const books = allBooks.filter(
-      (b) => !shouldFilterBook(b.title, b.subjects)
+      (b) => !shouldFilterBook(b.title, b.subjects, b.genre, b.id)
     );
 
     return NextResponse.json({

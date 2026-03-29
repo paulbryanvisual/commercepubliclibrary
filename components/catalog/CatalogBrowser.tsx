@@ -5,7 +5,7 @@ import Image from "next/image";
 import { type Genre } from "@/lib/catalog/books";
 import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
 
-const GENRES: Genre[] = ["Fiction", "Mystery", "Romance", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction"];
+const GENRES: Genre[] = ["Fiction", "Mystery", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction"];
 
 interface CatalogBook {
   id: number;
