@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePatron } from "@/components/patron/PatronContext";
 
 export interface BookInfo {
+  id?: number;
   title: string;
   author?: string;
   year?: number | null;
@@ -34,8 +35,41 @@ export default function BookDetailPanel({
   const [saveStatus, setSaveStatus] = useState<"idle" | "loading" | "saved" | "error">("idle");
   const [holdStatus, setHoldStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [holdMessage, setHoldMessage] = useState("");
+  const [description, setDescription] = useState<string | null>(book.description || null);
+  const [descLoading, setDescLoading] = useState(false);
   const { patron, setShowLoginModal } = usePatron();
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Fetch description from our API (which caches to DB)
+  useEffect(() => {
+    setDescription(book.description || null);
+    if (book.description) return;
+
+    const id = book.id;
+    const isbn = book.isbn;
+    const olkey = book.openLibraryKey;
+    if (!id && !isbn) return;
+
+    let cancelled = false;
+    setDescLoading(true);
+
+    const params = new URLSearchParams();
+    if (id) params.set("id", String(id));
+    if (isbn) params.set("isbn", isbn);
+    if (olkey) params.set("olkey", olkey);
+
+    fetch(`/api/catalog/description?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data.description) {
+          setDescription(data.description);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setDescLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [book.description, book.id, book.isbn, book.openLibraryKey]);
 
   // Check if already saved
   useEffect(() => {
@@ -246,9 +280,15 @@ export default function BookDetailPanel({
           </div>
 
           {/* Description */}
-          {book.description && (
-            <p className="mt-6 text-sm text-gray-600 leading-relaxed">{book.description}</p>
-          )}
+          {descLoading ? (
+            <div className="mt-6 space-y-2 animate-pulse">
+              <div className="h-3 bg-gray-200 rounded w-full" />
+              <div className="h-3 bg-gray-200 rounded w-5/6" />
+              <div className="h-3 bg-gray-200 rounded w-4/6" />
+            </div>
+          ) : description ? (
+            <p className="mt-6 text-sm text-gray-600 leading-relaxed">{description}</p>
+          ) : null}
 
           {/* Subject tags */}
           {book.subjects && book.subjects.length > 0 && (

@@ -129,14 +129,14 @@ function CatalogContent() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [selectedBook, setSelectedBook] = useState<BookInfo | null>(null);
-  const [browseGenre, setBrowseGenre] = useState<Genre | null>(null);
+  const [browseGenre, setBrowseGenre] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleLocalBookClick = useCallback((book: BookInfo) => {
     setSelectedBook(book);
   }, []);
 
-  const handleGenreSelect = useCallback((genre: Genre) => {
+  const handleGenreSelect = useCallback((genre: string) => {
     setBrowseGenre(genre);
     // Scroll to the genre section
     setTimeout(() => {
