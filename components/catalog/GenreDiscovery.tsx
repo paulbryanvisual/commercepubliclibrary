@@ -175,21 +175,30 @@ function optimizedCoverSrc(coverUrl: string): string {
   return `/_next/image?url=${encodeURIComponent(coverUrl)}&w=${COVER_W}&q=75`;
 }
 
-/** Eagerly preload cover images into the browser cache at roulette size */
-function preloadImages(urls: string[]) {
-  urls.forEach((url) => {
-    // Use <link rel="preload"> for high-priority eager loading
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = url;
-    document.head.appendChild(link);
+/**
+ * Eagerly load images into browser cache using Image objects.
+ * Returns a promise that resolves when all images are loaded (or failed).
+ */
+function preloadImages(urls: string[]): Promise<void> {
+  return new Promise((resolve) => {
+    let remaining = urls.length;
+    if (remaining === 0) { resolve(); return; }
+    const done = () => { remaining--; if (remaining <= 0) resolve(); };
+    urls.forEach((url) => {
+      const img = new window.Image();
+      img.onload = done;
+      img.onerror = done;
+      img.src = url;
+    });
+    // Safety timeout — don't wait forever
+    setTimeout(resolve, 8000);
   });
 }
 
 function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => void }) {
   const [preloadedBooks, setPreloadedBooks] = useState<SurpriseBook[]>([]);
   const [rouletteBooks, setRouletteBooks] = useState<SurpriseBook[]>([]);
+  const [imagesReady, setImagesReady] = useState(false);
   const [surpriseBook, setSurpriseBook] = useState<SurpriseBook | null>(null);
   const [phase, setPhase] = useState<"idle" | "spinning" | "landed">("idle");
   const [stripOffset, setStripOffset] = useState(0);
@@ -198,30 +207,33 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasFetched = useRef(false);
 
-  // Preload books + images on mount so the spin is instant
+  // Fetch books + preload images on mount — show static preview strip once loaded
   useEffect(() => {
     if (hasFetched.current) return;
     hasFetched.current = true;
 
     fetch(`/api/catalog/browse?genre=all&limit=20&random=true`)
       .then((r) => r.json())
-      .then((data) => {
+      .then(async (data) => {
         const books: SurpriseBook[] = data.books || [];
         if (books.length === 0) return;
         setPreloadedBooks(books);
 
-        // Prefetch optimised cover images into browser cache
+        // Actually load all cover images into browser cache
         const coverUrls = books
           .map((b) => b.coverUrl)
           .filter(Boolean)
           .map((url) => optimizedCoverSrc(url!));
-        preloadImages(coverUrls);
+        await preloadImages(coverUrls);
+
+        // Show the books as a static preview strip
+        setRouletteBooks(books);
+        setImagesReady(true);
       })
       .catch(() => {});
   }, []);
 
   const handleSurprise = useCallback(() => {
-    // If we have preloaded books use them; otherwise fetch fresh
     const startSpin = (books: SurpriseBook[]) => {
       if (books.length === 0) { setPhase("idle"); return; }
 
@@ -244,15 +256,15 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
         setSurpriseBook(books[winner % books.length]);
         setPhase("landed");
 
-        // Pre-fetch a fresh batch for next spin
+        // Pre-fetch a fresh batch for next spin (images load in background)
         fetch(`/api/catalog/browse?genre=all&limit=20&random=true`)
           .then((r) => r.json())
-          .then((data) => {
+          .then(async (data) => {
             const fresh: SurpriseBook[] = data.books || [];
             if (fresh.length > 0) {
               setPreloadedBooks(fresh);
               const urls = fresh.map((b) => b.coverUrl).filter(Boolean).map((u) => optimizedCoverSrc(u!));
-              preloadImages(urls);
+              await preloadImages(urls);
             }
           })
           .catch(() => {});
@@ -262,17 +274,22 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
     setPhase("spinning");
     setSurpriseBook(null);
 
-    if (preloadedBooks.length > 0) {
-      // Instant — images already cached
+    if (preloadedBooks.length > 0 && imagesReady) {
+      // Instant — images already in browser cache
       startSpin(preloadedBooks);
     } else {
-      // Fallback: fetch now
+      // Fallback: fetch and load now
       fetch(`/api/catalog/browse?genre=all&limit=20&random=true`)
         .then((r) => r.json())
-        .then((data) => startSpin(data.books || []))
+        .then(async (data) => {
+          const books: SurpriseBook[] = data.books || [];
+          const urls = books.map((b) => b.coverUrl).filter(Boolean).map((u) => optimizedCoverSrc(u!));
+          await preloadImages(urls);
+          startSpin(books);
+        })
         .catch(() => setPhase("idle"));
     }
-  }, [preloadedBooks]);
+  }, [preloadedBooks, imagesReady]);
 
   const handleClick = useCallback(() => {
     if (!surpriseBook) return;
