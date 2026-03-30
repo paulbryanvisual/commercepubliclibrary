@@ -90,7 +90,7 @@ export default function Footer() {
                   href="/catalog"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
-                  Search Catalog
+                  Books & Media
                 </Link>
               </li>
               <li>
@@ -128,15 +128,15 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Digital Resources column */}
+          {/* Explore column */}
           <div>
             <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide mb-4">
-              Digital Resources
+              Explore
             </h3>
             <ul className="space-y-2.5">
               <li>
                 <Link
-                  href="/digital"
+                  href="/catalog"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
                   Libby / OverDrive
@@ -144,7 +144,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link
-                  href="/digital"
+                  href="/catalog"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
                   Hoopla
@@ -152,7 +152,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link
-                  href="/digital"
+                  href="/history"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
                   TexShare Databases
