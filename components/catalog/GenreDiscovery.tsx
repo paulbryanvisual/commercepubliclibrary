@@ -34,7 +34,6 @@ interface BookInfo {
 interface GenreTile {
   genre: Genre;
   label: string;
-  emoji: string;
   gradient: string;
   imageUrl: string;
   description: string;
@@ -44,7 +43,7 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Fiction",
     label: "Fiction",
-    emoji: "📖",
+
     gradient: "from-emerald-600 to-teal-700",
     imageUrl: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=600&h=400&fit=crop&q=80",
     description: "Stories that transport you",
@@ -52,7 +51,7 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Mystery",
     label: "Mystery & Thriller",
-    emoji: "🔍",
+
     gradient: "from-slate-700 to-gray-900",
     imageUrl: "https://images.unsplash.com/photo-1587876931567-564ce588bfbd?w=600&h=400&fit=crop&q=80",
     description: "Twists you won't see coming",
@@ -60,7 +59,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Sci-Fi",
     label: "Sci-Fi & Fantasy",
-    emoji: "🚀",
     gradient: "from-indigo-600 to-purple-700",
     imageUrl: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&h=400&fit=crop&q=80",
     description: "Worlds beyond imagination",
@@ -68,7 +66,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Biography",
     label: "Biography & Memoir",
-    emoji: "👤",
     gradient: "from-amber-600 to-orange-700",
     imageUrl: "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=600&h=400&fit=crop&q=80",
     description: "Real lives, real stories",
@@ -76,7 +73,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Kids",
     label: "Kids",
-    emoji: "🌈",
     gradient: "from-green-500 to-emerald-600",
     imageUrl: "https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=600&h=400&fit=crop&q=80",
     description: "Adventures for young readers",
@@ -84,7 +80,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Teens",
     label: "Young Adult",
-    emoji: "⚡",
     gradient: "from-violet-600 to-purple-700",
     imageUrl: "https://images.unsplash.com/photo-1529590003495-b2646e2718bf?w=600&h=400&fit=crop&q=80",
     description: "Bold stories for bold readers",
@@ -92,7 +87,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Nonfiction",
     label: "Nonfiction",
-    emoji: "🧠",
     gradient: "from-sky-600 to-blue-700",
     imageUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop&q=80",
     description: "Expand your mind",
@@ -100,7 +94,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Spanish" as Genre,
     label: "En Español",
-    emoji: "🇲🇽",
     gradient: "from-red-600 to-yellow-600",
     imageUrl: "https://images.unsplash.com/photo-1551029506-0807df4e2031?w=600&h=400&fit=crop&q=80",
     description: "Libros en español",
@@ -154,9 +147,6 @@ function GenreTileCard({ tile, onClick }: { tile: GenreTile; onClick: () => void
 
       {/* Content */}
       <div className="absolute inset-0 flex flex-col justify-end p-4">
-        <span className="text-2xl mb-1 group-hover:scale-110 transition-transform origin-left">
-          {tile.emoji}
-        </span>
         <h3 className="text-base md:text-lg font-bold text-white leading-tight">
           {tile.label}
         </h3>

@@ -28,7 +28,7 @@ const digitalResources = [
     title: "Libby / OverDrive",
     subtitle: "Ebooks & Audiobooks",
     description: "Thousands of ebooks and audiobooks — free with your library card.",
-    href: "/digital",
+    href: "/catalog",
     icon: (
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
     ),
@@ -38,7 +38,7 @@ const digitalResources = [
     title: "Hoopla",
     subtitle: "Movies, Music & More",
     description: "Instant access — no waitlists. Movies, music, ebooks, and comics.",
-    href: "/digital",
+    href: "/catalog",
     icon: (
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-purple"><polygon points="5 3 19 12 5 21 5 3"/></svg>
     ),
@@ -48,7 +48,7 @@ const digitalResources = [
     title: "TexShare Databases",
     subtitle: "Research & Genealogy",
     description: "Ancestry Library, Fold3, and 70+ premium databases — all free.",
-    href: "/digital",
+    href: "/history",
     icon: (
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
     ),
@@ -105,7 +105,7 @@ export default async function HomePage({
   const newArrivalsLabel = cmsPageContent.new_arrivals_label || "Just Added";
   const newArrivalsHeading = cmsPageContent.new_arrivals_heading || "New Arrivals";
   const digitalLabel = cmsPageContent.digital_label || "Read Anywhere";
-  const digitalHeading = cmsPageContent.digital_heading || "Digital Resources";
+  const digitalHeading = cmsPageContent.digital_heading || "Digital Resources — Free with Your Card";
   const staffPicksLabel = cmsPageContent.staff_picks_label || "Recommended";
   const staffPicksHeading = cmsPageContent.staff_picks_heading || "Staff Picks";
 
@@ -184,11 +184,11 @@ export default async function HomePage({
               {/* Quick chips */}
               <div className="flex flex-wrap gap-2 mt-5">
                 {[
-                  { label: "Borrow ebooks", href: "/digital", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
+                  { label: "Borrow ebooks", href: "/catalog", icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" },
                   { label: "Events", href: "/events", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
                   { label: "Passport", href: "/services/passport", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
                   { label: "Kids", href: "/kids", icon: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
-                  { label: "Catalog", href: "/catalog", icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
+                  { label: "Books & Media", href: "/catalog", icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
                 ].map((chip) => (
                   <Link
                     key={chip.label}

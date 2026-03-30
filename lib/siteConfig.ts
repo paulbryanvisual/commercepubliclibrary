@@ -32,14 +32,13 @@ export interface NavLink {
 
 export const navLinks: NavLink[] = [
   { href: "/", label: "Home" },
-  { href: "/catalog", label: "Catalog" },
+  { href: "/catalog", label: "Books & Media" },
   { href: "/events", label: "Events" },
   {
     href: "/services",
     label: "Services",
     children: [
       { href: "/services", label: "All Services" },
-      { href: "/digital", label: "Digital Resources" },
       { href: "/kids", label: "Kids" },
       { href: "/history", label: "History" },
       { href: "/services/passport", label: "Passports" },

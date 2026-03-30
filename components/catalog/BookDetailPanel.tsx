@@ -57,6 +57,8 @@ export default function BookDetailPanel({
     if (id) params.set("id", String(id));
     if (isbn) params.set("isbn", isbn);
     if (olkey) params.set("olkey", olkey);
+    if (book.title) params.set("title", book.title);
+    if (book.author) params.set("author", book.author);
 
     fetch(`/api/catalog/description?${params}`)
       .then((r) => r.json())
@@ -69,7 +71,7 @@ export default function BookDetailPanel({
       .finally(() => { if (!cancelled) setDescLoading(false); });
 
     return () => { cancelled = true; };
-  }, [book.description, book.id, book.isbn, book.openLibraryKey]);
+  }, [book.description, book.id, book.isbn, book.openLibraryKey, book.title, book.author]);
 
   // Check if already saved
   useEffect(() => {

@@ -78,15 +78,19 @@ export async function GET(req: NextRequest) {
       genre: row.genre,
       description: row.description,
       subjects: row.subjects || [],
-      coverUrl: proxyCoverUrl(row.cover_url),
+      coverUrl: proxyCoverUrl(row.cover_url, {
+        isbn: row.isbn,
+        title: row.title,
+        author: row.author,
+      }),
       publisher: row.publisher,
       pages: row.pages,
       openLibraryKey: row.open_library_key,
     }));
 
-    // Filter out banned/NSFW/romance books from browse (they remain searchable)
+    // Filter out banned/NSFW/romance books and books without covers from browse
     const books = allBooks.filter(
-      (b) => !shouldFilterBook(b.title, b.subjects, b.genre, b.id)
+      (b) => b.coverUrl && !shouldFilterBook(b.title, b.subjects, b.genre, b.id)
     );
 
     return NextResponse.json({

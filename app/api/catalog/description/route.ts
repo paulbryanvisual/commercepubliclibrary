@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { lookupGoogleBook } from "@/lib/catalog/google-books";
 
 export const runtime = "nodejs";
 
 /**
- * GET /api/catalog/description?id=123
+ * GET /api/catalog/description?id=123&title=...&author=...
  * or  /api/catalog/description?isbn=978...&olkey=/works/OL...
  *
- * Returns the book description, fetching from Open Library and caching
- * in our DB if we don't have one yet.
+ * Returns the book description, fetching from Open Library first,
+ * then falling back to Google Books API. Caches in our DB.
  */
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   const isbn = req.nextUrl.searchParams.get("isbn");
   const olkey = req.nextUrl.searchParams.get("olkey");
+  const title = req.nextUrl.searchParams.get("title");
+  const author = req.nextUrl.searchParams.get("author");
 
   if (!id && !isbn) {
     return NextResponse.json({ error: "Missing id or isbn" }, { status: 400 });
@@ -32,8 +35,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 2. Fetch from Open Library
+  // 2. Try Open Library
   let description: string | null = null;
+  let source = "none";
 
   try {
     // Try work key first (most reliable for descriptions)
@@ -46,6 +50,7 @@ export async function GET(req: NextRequest) {
         const data = await res.json();
         const raw = data.description;
         description = typeof raw === "string" ? raw : raw?.value || null;
+        if (description) source = "openlibrary";
       }
     }
 
@@ -58,6 +63,7 @@ export async function GET(req: NextRequest) {
         const data = await res.json();
         const raw = data.description;
         description = typeof raw === "string" ? raw : raw?.value || null;
+        if (description) source = "openlibrary";
 
         // If edition has no description, try its work
         if (!description && data.works?.[0]?.key) {
@@ -68,12 +74,26 @@ export async function GET(req: NextRequest) {
             const wData = await wRes.json();
             const wRaw = wData.description;
             description = typeof wRaw === "string" ? wRaw : wRaw?.value || null;
+            if (description) source = "openlibrary";
           }
         }
       }
     }
   } catch {
-    // Open Library timeout/error — return nothing
+    // Open Library timeout/error — fall through to Google Books
+  }
+
+  // 3. Fall back to Google Books API
+  if (!description) {
+    try {
+      const gbook = await lookupGoogleBook(isbn, title, author);
+      if (gbook.description) {
+        description = gbook.description;
+        source = "googlebooks";
+      }
+    } catch {
+      // Google Books timeout/error — continue
+    }
   }
 
   if (description) {
@@ -84,7 +104,7 @@ export async function GET(req: NextRequest) {
       description = description.slice(0, 1500).replace(/\s\S*$/, "") + "…";
     }
 
-    // 3. Cache in DB
+    // 4. Cache in DB
     if (id) {
       await supabase
         .from("catalog_books")
@@ -96,6 +116,6 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     description: description || null,
-    source: description ? "openlibrary" : "none",
+    source,
   });
 }

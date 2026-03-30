@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lookupGoogleBook } from "@/lib/catalog/google-books";
 
 export const runtime = "nodejs";
 
@@ -28,6 +29,8 @@ function pruneCache() {
 const ALLOWED_HOSTS = [
   "covers.openlibrary.org",
   "images.unsplash.com",
+  "books.google.com",
+  "books.googleusercontent.com",
 ];
 
 function isAllowedUrl(url: string): boolean {
@@ -41,8 +44,38 @@ function isAllowedUrl(url: string): boolean {
   }
 }
 
+/**
+ * Fetch an image and validate it's a real cover (not a placeholder).
+ * Returns { buffer, contentType } or null.
+ */
+async function fetchAndValidateImage(imageUrl: string): Promise<{ buffer: ArrayBuffer; contentType: string } | null> {
+  try {
+    const response = await fetch(imageUrl, {
+      headers: { "User-Agent": "CommercePublicLibrary/1.0" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return null;
+
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) return null;
+
+    const buffer = await response.arrayBuffer();
+    // Reject tiny placeholders (OL returns a ~43-byte transparent GIF for missing covers)
+    if (buffer.byteLength < 1000) return null;
+
+    return { buffer, contentType };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
+  // Optional fallback params — used to try Google Books when OL has no cover
+  const isbn = req.nextUrl.searchParams.get("isbn");
+  const title = req.nextUrl.searchParams.get("title");
+  const author = req.nextUrl.searchParams.get("author");
 
   if (!url) {
     return NextResponse.json({ error: "Missing url parameter" }, { status: 400 });
@@ -66,34 +99,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Follow redirects (Open Library 302s to IA servers for real covers)
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "CommercePublicLibrary/1.0",
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(10000),
-    });
+    // 1. Try the primary URL (usually Open Library)
+    let result = await fetchAndValidateImage(url);
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Upstream returned ${response.status}` },
-        { status: 502 }
-      );
+    // 2. If primary failed, try Google Books as fallback
+    if (!result && (isbn || title)) {
+      try {
+        const gbook = await lookupGoogleBook(isbn, title, author);
+        if (gbook.coverUrl) {
+          result = await fetchAndValidateImage(gbook.coverUrl);
+        }
+      } catch {
+        // Google Books fallback failed — continue to 404
+      }
     }
 
-    const contentType = response.headers.get("content-type") || "image/jpeg";
-
-    // Only proxy images
-    if (!contentType.startsWith("image/")) {
-      return NextResponse.json({ error: "Not an image" }, { status: 400 });
-    }
-
-    const buffer = await response.arrayBuffer();
-
-    // Open Library returns a tiny ~43-byte transparent GIF for missing covers
-    // instead of a 404. Detect this and return 404 so clients show a fallback.
-    if (buffer.byteLength < 1000) {
+    if (!result) {
       return NextResponse.json(
         { error: "No cover available" },
         {
@@ -106,13 +127,13 @@ export async function GET(req: NextRequest) {
     }
 
     // Store in memory cache
-    memoryCache.set(url, { buffer, contentType, timestamp: Date.now() });
+    memoryCache.set(url, { buffer: result.buffer, contentType: result.contentType, timestamp: Date.now() });
     pruneCache();
 
-    return new Response(buffer, {
+    return new Response(result.buffer, {
       status: 200,
       headers: {
-        "Content-Type": contentType,
+        "Content-Type": result.contentType,
         "Cache-Control": "public, max-age=2592000, s-maxage=2592000, stale-while-revalidate=86400",
         "X-Cache": "MISS",
       },
