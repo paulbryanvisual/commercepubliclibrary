@@ -465,7 +465,6 @@ export default async function HomePage({
                       alt={`Cover of ${title}`}
                       className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
-                      onError={(e) => { (e.target as HTMLImageElement).src = "/images/book-placeholder.svg"; }}
                     />
                     <div className="absolute left-0 top-0 bottom-0 w-3 bg-black/10" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
