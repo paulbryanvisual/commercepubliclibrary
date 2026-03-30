@@ -175,11 +175,12 @@ function optimizedCoverSrc(coverUrl: string): string {
   return `/_next/image?url=${encodeURIComponent(coverUrl)}&w=${COVER_W}&q=75`;
 }
 
-/** Prefetch an array of image URLs into the browser cache */
-function prefetchImages(urls: string[]) {
+/** Eagerly preload cover images into the browser cache at roulette size */
+function preloadImages(urls: string[]) {
   urls.forEach((url) => {
+    // Use <link rel="preload"> for high-priority eager loading
     const link = document.createElement("link");
-    link.rel = "prefetch";
+    link.rel = "preload";
     link.as = "image";
     link.href = url;
     document.head.appendChild(link);
@@ -214,7 +215,7 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
           .map((b) => b.coverUrl)
           .filter(Boolean)
           .map((url) => optimizedCoverSrc(url!));
-        prefetchImages(coverUrls);
+        preloadImages(coverUrls);
       })
       .catch(() => {});
   }, []);
@@ -251,7 +252,7 @@ function SurpriseSection({ onSelectBook }: { onSelectBook: (book: BookInfo) => v
             if (fresh.length > 0) {
               setPreloadedBooks(fresh);
               const urls = fresh.map((b) => b.coverUrl).filter(Boolean).map((u) => optimizedCoverSrc(u!));
-              prefetchImages(urls);
+              preloadImages(urls);
             }
           })
           .catch(() => {});

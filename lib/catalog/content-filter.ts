@@ -180,6 +180,7 @@ const FLAGGED_BOOK_IDS: Set<number> = new Set([
   963,   // "The Man Within (Feline Breeds)" — erotic romance
   659,   // "Lady Chatterley's Lover" — suggestive cover
   106,   // "Shades of Grey" — erotica
+  1068,  // "The Woman in Me" by Britney Spears — suggestive cover
 ]);
 
 // ---------- Public API ----------

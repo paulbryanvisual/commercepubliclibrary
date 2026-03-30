@@ -89,9 +89,16 @@ export async function GET(req: NextRequest) {
     }));
 
     // Filter out banned/NSFW/romance books and books without covers from browse
-    const books = allBooks.filter(
-      (b) => b.coverUrl && !shouldFilterBook(b.title, b.subjects, b.genre, b.id)
-    );
+    // Also deduplicate by normalized title to avoid showing multiple editions
+    const seenTitles = new Set<string>();
+    const books = allBooks.filter((b) => {
+      if (!b.coverUrl) return false;
+      if (shouldFilterBook(b.title, b.subjects, b.genre, b.id)) return false;
+      const normalizedTitle = b.title.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (seenTitles.has(normalizedTitle)) return false;
+      seenTitles.add(normalizedTitle);
+      return true;
+    });
 
     return NextResponse.json({
       books,
