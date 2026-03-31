@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { lookupGoogleBook } from "@/lib/catalog/google-books";
+import { supabase } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -108,6 +109,20 @@ export async function GET(req: NextRequest) {
         const gbook = await lookupGoogleBook(isbn, title, author);
         if (gbook.coverUrl) {
           result = await fetchAndValidateImage(gbook.coverUrl);
+
+          // Save the discovered cover URL back to the DB so we don't need
+          // Google Books again for this book. Fire-and-forget — don't block
+          // the response on the DB write.
+          if (result && isbn) {
+            supabase
+              .from("catalog_books")
+              .update({ cover_url: gbook.coverUrl })
+              .eq("isbn", isbn)
+              .is("cover_url", null)
+              .then(({ error }) => {
+                if (error) console.error("Cover write-back error:", error);
+              });
+          }
         }
       } catch {
         // Google Books fallback failed — continue to 404
