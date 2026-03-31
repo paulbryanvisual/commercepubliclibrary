@@ -28,7 +28,7 @@ const digitalResources = [
     title: "Libby / OverDrive",
     subtitle: "Ebooks & Audiobooks",
     description: "Thousands of ebooks and audiobooks — free with your library card.",
-    href: "/catalog",
+    href: "/catalog/digital",
     icon: (
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
     ),
@@ -38,7 +38,7 @@ const digitalResources = [
     title: "Hoopla",
     subtitle: "Movies, Music & More",
     description: "Instant access — no waitlists. Movies, music, ebooks, and comics.",
-    href: "/catalog",
+    href: "/catalog/digital",
     icon: (
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-purple"><polygon points="5 3 19 12 5 21 5 3"/></svg>
     ),
@@ -48,7 +48,7 @@ const digitalResources = [
     title: "TexShare Databases",
     subtitle: "Research & Genealogy",
     description: "Ancestry Library, Fold3, and 70+ premium databases — all free.",
-    href: "/history",
+    href: "/catalog/digital",
     icon: (
       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
     ),
@@ -613,6 +613,108 @@ export default async function HomePage({
                 Our story &rarr;
               </Link>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── SOCIAL MEDIA / COMMUNITY ─── */}
+      <section className="mx-auto max-w-site px-4 md:px-8 mt-16">
+        <div className="mb-6">
+          <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-1">
+            Stay Connected
+          </p>
+          <h2 className="text-h2 text-gray-800">Follow Us</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Facebook embed */}
+          <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+              <div className="h-8 w-8 rounded-full bg-[#1877F2] flex items-center justify-center">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+                  <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Commerce Public Library</p>
+                <p className="text-xs text-gray-400">Latest news, events & community photos</p>
+              </div>
+            </div>
+            <div className="flex justify-center p-3">
+              <iframe
+                src="https://www.facebook.com/plugins/page.php?href=https%3A%2F%2Fwww.facebook.com%2FCommercePL&tabs=timeline&width=500&height=400&small_header=true&adapt_container_width=true&hide_cover=false&show_facepile=true&appId"
+                width="500"
+                height="400"
+                style={{ border: "none", overflow: "hidden", maxWidth: "100%" }}
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                title="Commerce Public Library Facebook Feed"
+                loading="lazy"
+              />
+            </div>
+          </div>
+
+          {/* Social links + highlights */}
+          <div className="space-y-4">
+            {/* Instagram CTA */}
+            <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50 p-6">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center shrink-0">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                    <path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z" />
+                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">@commercepubliclibrary</h3>
+                  <p className="text-sm text-gray-500">Behind-the-scenes, new arrivals & events</p>
+                </div>
+              </div>
+              <a
+                href="https://instagram.com/commercepubliclibrary"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 via-pink-500 to-orange-400 px-5 py-2.5 text-sm font-semibold text-white hover:shadow-lg transition-shadow"
+              >
+                Follow on Instagram
+              </a>
+            </div>
+
+            {/* Featured program cards */}
+            <Link href="/services/summer-reading" className="group flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5 hover:shadow-md transition-all">
+              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-400 to-rose-500 flex items-center justify-center shrink-0">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800 group-hover:text-amber-700 transition-colors">Summer Reading: Unearth a Story</p>
+                <p className="text-xs text-gray-500">Registration opens April 1 &middot; All ages</p>
+              </div>
+            </Link>
+
+            <Link href="/services/makerspace" className="group flex items-center gap-4 rounded-2xl border border-blue-200 bg-blue-50 p-5 hover:shadow-md transition-all">
+              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 002 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800 group-hover:text-blue-700 transition-colors">Maker Space</p>
+                <p className="text-xs text-gray-500">3D printing, Cricut, crafts &middot; Free with library card</p>
+              </div>
+            </Link>
+
+            <Link href="/services/homeschool" className="group flex items-center gap-4 rounded-2xl border border-green-200 bg-green-50 p-5 hover:shadow-md transition-all">
+              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shrink-0">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                  <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-gray-800 group-hover:text-green-700 transition-colors">Homeschool Resources</p>
+                <p className="text-xs text-gray-500">Art studio, books, databases &middot; Free for families</p>
+              </div>
+            </Link>
           </div>
         </div>
       </section>

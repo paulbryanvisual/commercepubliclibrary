@@ -8,7 +8,9 @@ export type Genre =
   | "Biography"
   | "Kids"
   | "Teens"
-  | "Nonfiction";
+  | "Nonfiction"
+  | "Early Childhood"
+  | "DVD";
 
 export interface Book {
   isbn: string;
@@ -349,6 +351,8 @@ export const genres: Genre[] = [
   "Kids",
   "Teens",
   "Nonfiction",
+  "Early Childhood",
+  "DVD",
 ];
 
 export function getBookByIsbn(isbn: string): Book | undefined {

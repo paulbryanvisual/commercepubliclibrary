@@ -39,8 +39,11 @@ export const navLinks: NavLink[] = [
     label: "Services",
     children: [
       { href: "/services", label: "All Services" },
-      { href: "/kids", label: "Kids" },
-      { href: "/history", label: "History" },
+      { href: "/services/makerspace", label: "Maker Space" },
+      { href: "/services/homeschool", label: "Homeschool Resources" },
+      { href: "/services/summer-reading", label: "Summer Reading" },
+      { href: "/kids", label: "Kids Zone" },
+      { href: "/history", label: "History & Genealogy" },
       { href: "/services/passport", label: "Passports" },
       { href: "/services/rooms", label: "Meeting Rooms" },
     ],

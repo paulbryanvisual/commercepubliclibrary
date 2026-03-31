@@ -43,7 +43,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Fiction",
     label: "Fiction",
-
     gradient: "from-emerald-600 to-teal-700",
     imageUrl: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=600&h=400&fit=crop&q=80",
     description: "Stories that transport you",
@@ -51,7 +50,6 @@ const genreTiles: GenreTile[] = [
   {
     genre: "Mystery",
     label: "Mystery & Thriller",
-
     gradient: "from-slate-700 to-gray-900",
     imageUrl: "https://images.unsplash.com/photo-1587876931567-564ce588bfbd?w=600&h=400&fit=crop&q=80",
     description: "Twists you won't see coming",
@@ -78,11 +76,25 @@ const genreTiles: GenreTile[] = [
     description: "Adventures for young readers",
   },
   {
+    genre: "Early Childhood",
+    label: "Early Childhood",
+    gradient: "from-pink-400 to-rose-500",
+    imageUrl: "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=600&h=400&fit=crop&q=80",
+    description: "Picture books & first reads",
+  },
+  {
     genre: "Teens",
     label: "Young Adult",
     gradient: "from-violet-600 to-purple-700",
     imageUrl: "https://images.unsplash.com/photo-1529590003495-b2646e2718bf?w=600&h=400&fit=crop&q=80",
     description: "Bold stories for bold readers",
+  },
+  {
+    genre: "Graphic Novels" as Genre,
+    label: "Graphic Novels",
+    gradient: "from-yellow-500 to-orange-500",
+    imageUrl: "https://images.unsplash.com/photo-1601645191163-3fc0d5d64e35?w=600&h=400&fit=crop&q=80",
+    description: "Comics, manga & visual stories",
   },
   {
     genre: "Nonfiction",

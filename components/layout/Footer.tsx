@@ -136,7 +136,7 @@ export default function Footer() {
             <ul className="space-y-2.5">
               <li>
                 <Link
-                  href="/catalog"
+                  href="/catalog/digital"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
                   Libby / OverDrive
@@ -144,7 +144,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link
-                  href="/catalog"
+                  href="/catalog/digital"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
                   Hoopla
@@ -152,18 +152,18 @@ export default function Footer() {
               </li>
               <li>
                 <Link
-                  href="/history"
+                  href="/catalog/new-arrivals"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
-                  TexShare Databases
+                  New Arrivals
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/history"
+                  href="/catalog/dvds"
                   className="text-sm text-gray-500 hover:text-primary transition-colors"
                 >
-                  Local History
+                  DVDs & Media
                 </Link>
               </li>
               <li>

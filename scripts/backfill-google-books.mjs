@@ -22,8 +22,8 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const BATCH_SIZE = 5; // concurrent Google API requests (be nice)
-const DELAY_MS = 500; // delay between batches to avoid rate limits
+const BATCH_SIZE = 10; // concurrent Google API requests
+const DELAY_MS = 300; // delay between batches to avoid rate limits
 const args = process.argv.slice(2);
 const coversOnly = args.includes("--covers-only");
 const descOnly = args.includes("--desc-only");
@@ -94,13 +94,14 @@ async function main() {
   if (coversOnly) console.log("(Covers only)");
   if (descOnly) console.log("(Descriptions only)");
 
-  let offset = 0;
   let totalProcessed = 0;
   let coversFound = 0;
   let descriptionsFound = 0;
+  let consecutiveEmpty = 0; // track batches with no Google results
 
   while (totalProcessed < maxLimit) {
-    // Fetch books that need covers OR descriptions
+    // Always query from the start — updated records drop out of the IS NULL filter.
+    // Use a small page offset to skip past books we already tried but Google had nothing for.
     let query = supabase
       .from("catalog_books")
       .select("id, isbn, title, author, cover_url, description")
@@ -111,18 +112,22 @@ async function main() {
     } else if (descOnly) {
       query = query.is("description", null);
     } else {
-      // Get books missing either cover or description
       query = query.or("cover_url.is.null,description.is.null");
     }
 
-    query = query.range(offset, offset + 99);
+    query = query.range(0, 99);
 
     const { data: books, error } = await query;
     if (error) {
       console.error("DB error:", error);
       break;
     }
-    if (!books || books.length === 0) break;
+    if (!books || books.length === 0) {
+      console.log("\nNo more books to process.");
+      break;
+    }
+
+    let batchUpdates = 0;
 
     // Process in small batches
     for (let i = 0; i < books.length && totalProcessed < maxLimit; i += BATCH_SIZE) {
@@ -137,31 +142,26 @@ async function main() {
       for (const { book, gbook } of results) {
         const updates = {};
 
-        // Backfill cover if missing
-        if (!coversOnly || !book.cover_url) {
-          if (!book.cover_url && gbook.coverUrl) {
-            updates.cover_url = gbook.coverUrl;
-            coversFound++;
-            console.log(`  COVER: [${book.id}] ${book.title}`);
-          }
+        if (!book.cover_url && gbook.coverUrl) {
+          updates.cover_url = gbook.coverUrl;
+          coversFound++;
         }
 
-        // Backfill description if missing
-        if (!descOnly || !book.description) {
-          if (!book.description && gbook.description) {
-            updates.description = gbook.description;
-            descriptionsFound++;
-            console.log(`  DESC:  [${book.id}] ${book.title}`);
-          }
+        if (!book.description && gbook.description) {
+          updates.description = gbook.description;
+          descriptionsFound++;
         }
 
-        if (Object.keys(updates).length > 0 && !dryRun) {
-          const { error: updateError } = await supabase
-            .from("catalog_books")
-            .update(updates)
-            .eq("id", book.id);
-          if (updateError) {
-            console.error(`  ERROR updating ${book.id}:`, updateError);
+        if (Object.keys(updates).length > 0) {
+          batchUpdates++;
+          if (!dryRun) {
+            const { error: updateError } = await supabase
+              .from("catalog_books")
+              .update(updates)
+              .eq("id", book.id);
+            if (updateError) {
+              console.error(`  ERROR updating ${book.id}:`, updateError);
+            }
           }
         }
 
@@ -169,14 +169,24 @@ async function main() {
       }
 
       process.stdout.write(
-        `\rProcessed ${totalProcessed} books — covers: ${coversFound}, descriptions: ${descriptionsFound}...`,
+        `\rProcessed ${totalProcessed} — covers: ${coversFound}, descriptions: ${descriptionsFound}  `,
       );
 
-      // Rate-limit delay
       await sleep(DELAY_MS);
     }
 
-    offset += books.length;
+    // If no updates in this page of 100, Google has nothing for these books.
+    // Stop to avoid infinite loop re-querying the same unfillable records.
+    if (batchUpdates === 0) {
+      consecutiveEmpty++;
+      if (consecutiveEmpty >= 3) {
+        console.log("\n3 consecutive pages with no Google results — stopping.");
+        break;
+      }
+    } else {
+      consecutiveEmpty = 0;
+    }
+
     if (books.length < 100) break;
   }
 

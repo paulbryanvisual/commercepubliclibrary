@@ -23,12 +23,19 @@ export async function GET(req: NextRequest) {
       .from("catalog_books")
       .select("*", { count: "exact" });
 
-    // Genre filter — "Spanish" is a virtual genre based on subjects
+    // Genre filter — "Spanish" and "Graphic Novels" are virtual genres based on subjects
     if (genre === "Spanish") {
       // Match books with Spanish-language subject tags
       query = query.or(
         "subjects.cs.{Spanish language materials},subjects.cs.{Spanish language},subjects.cs.{Ficción},subjects.cs.{novela},subjects.cs.{español}"
       );
+    } else if (genre === "Graphic Novels") {
+      // Match books with graphic novel / comic subject tags
+      query = query.or(
+        "subjects.cs.{Graphic novels},subjects.cs.{graphic novel},subjects.cs.{Comic books, strips},subjects.cs.{Comics & graphic novels},subjects.cs.{manga},subjects.cs.{Cartoons and comics},subjects.cs.{Comics & Graphic Novels}"
+      );
+    } else if (genre === "Early Childhood") {
+      query = query.eq("genre", "Early Childhood");
     } else if (genre && genre !== "all") {
       query = query.eq("genre", genre);
     }
@@ -47,6 +54,10 @@ export async function GET(req: NextRequest) {
       if (genre === "Spanish") {
         countQuery = countQuery.or(
           "subjects.cs.{Spanish language materials},subjects.cs.{Spanish language},subjects.cs.{Ficción},subjects.cs.{novela},subjects.cs.{español}"
+        );
+      } else if (genre === "Graphic Novels") {
+        countQuery = countQuery.or(
+          "subjects.cs.{Graphic novels},subjects.cs.{graphic novel},subjects.cs.{Comic books, strips},subjects.cs.{Comics & graphic novels},subjects.cs.{manga},subjects.cs.{Cartoons and comics},subjects.cs.{Comics & Graphic Novels}"
         );
       } else if (genre && genre !== "all") {
         countQuery = countQuery.eq("genre", genre);
@@ -86,6 +97,10 @@ export async function GET(req: NextRequest) {
       publisher: row.publisher,
       pages: row.pages,
       openLibraryKey: row.open_library_key,
+      available: row.available,
+      totalCopies: row.total_copies,
+      materialType: row.material_type,
+      callNumber: row.call_number,
     }));
 
     // Filter out banned/NSFW/romance books and books without covers from browse
@@ -93,7 +108,7 @@ export async function GET(req: NextRequest) {
     const seenTitles = new Set<string>();
     const books = allBooks.filter((b) => {
       if (!b.coverUrl) return false;
-      if (shouldFilterBook(b.title, b.subjects, b.genre, b.id)) return false;
+      if (shouldFilterBook(b.title, b.subjects, b.genre, b.id, b.description)) return false;
       const normalizedTitle = b.title.toLowerCase().replace(/[^a-z0-9]/g, "");
       if (seenTitles.has(normalizedTitle)) return false;
       seenTitles.add(normalizedTitle);

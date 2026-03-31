@@ -169,6 +169,24 @@ const NSFW_SUBJECT_KEYWORDS: string[] = [
   "prostitut",       // prostitution, prostitutes
 ];
 
+// ---------- Keywords hidden from browse/discovery ----------
+// Books whose title, description, or subjects contain these keywords are
+// hidden from browse grids and featured sections. They remain fully
+// searchable and accessible when a patron drills down into a category
+// or searches explicitly.
+const HIDDEN_BROWSE_KEYWORDS: string[] = [
+  "gay",
+  "bisexual",
+  "queer",
+  "lesbian",
+  "transgender",
+  "lgbtq",
+  "lgbt",
+  "homosexual",
+  "nonbinary",
+  "non-binary",
+];
+
 // ---------- Flagged book IDs (suggestive covers, manually reviewed) ----------
 // These books have covers that are sexually suggestive / not family-friendly.
 // They are hidden from browse but remain searchable.
@@ -201,6 +219,7 @@ export function shouldFilterBook(
   subjects?: string[],
   genre?: string,
   id?: number,
+  description?: string,
 ): boolean {
   // Check flagged book IDs (manually reviewed suggestive covers, etc.)
   if (id !== undefined && FLAGGED_BOOK_IDS.has(id)) return true;
@@ -227,6 +246,21 @@ export function shouldFilterBook(
     }
   }
 
+  // Check hidden browse keywords against title, description, and subjects
+  // These books are hidden from browse/discovery but remain searchable
+  const titleLower = normalizedTitle;
+  const descLower = (description || "").toLowerCase();
+  const subjectsText = (subjects || []).map((s) => s.toLowerCase()).join(" ");
+
+  for (const keyword of HIDDEN_BROWSE_KEYWORDS) {
+    // Use word-boundary matching to avoid false positives
+    // e.g. "gay" shouldn't match "Gayatri" — check as whole word
+    const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
+    if (wordRegex.test(titleLower)) return true;
+    if (wordRegex.test(descLower)) return true;
+    if (wordRegex.test(subjectsText)) return true;
+  }
+
   return false;
 }
 
@@ -234,8 +268,8 @@ export function shouldFilterBook(
  * Filter an array of books, removing those that should be hidden.
  * T must have at least { title: string; subjects?: string[] }.
  */
-export function filterBooks<T extends { title: string; subjects?: string[]; genre?: string; id?: number }>(
+export function filterBooks<T extends { title: string; subjects?: string[]; genre?: string; id?: number; description?: string }>(
   books: T[],
 ): T[] {
-  return books.filter((b) => !shouldFilterBook(b.title, b.subjects, b.genre, b.id));
+  return books.filter((b) => !shouldFilterBook(b.title, b.subjects, b.genre, b.id, b.description));
 }

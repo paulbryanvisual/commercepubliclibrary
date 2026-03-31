@@ -18,6 +18,10 @@ export interface BookInfo {
   description?: string;
   genre?: string;
   openLibraryKey?: string;
+  available?: number | null;
+  totalCopies?: number | null;
+  materialType?: string | null;
+  callNumber?: string | null;
 }
 
 export default function BookDetailPanel({
@@ -302,6 +306,89 @@ export default function BookDetailPanel({
               ))}
             </div>
           )}
+
+          {/* Availability & Ways to Get This */}
+          <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50/50 p-4">
+            <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+              </svg>
+              Ways to Get This
+            </h3>
+
+            {/* Physical copy availability */}
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-3 rounded-lg bg-white border border-gray-100 p-3">
+                <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${
+                  book.available && book.available > 0 ? "bg-green-500" : "bg-amber-400"
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-700">Physical Copy</p>
+                  <p className="text-xs text-gray-400">
+                    {book.available != null && book.totalCopies != null
+                      ? `${book.available} of ${book.totalCopies} available`
+                      : "Check availability in catalog"}
+                    {book.callNumber ? ` · ${book.callNumber}` : ""}
+                  </p>
+                </div>
+                <a
+                  href={opacUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-lg bg-[#1D9E75] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#178a65] transition-colors"
+                >
+                  {book.available && book.available > 0 ? "Reserve" : "Hold"}
+                </a>
+              </div>
+
+              {/* Libby (OverDrive) */}
+              {book.materialType !== "DVD" && (
+                <a
+                  href={`https://libbyapp.com/search/commercepubliclibrary/search/query-${encodeURIComponent(book.title)}/page-1`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-lg bg-white border border-gray-100 p-3 hover:border-orange-200 hover:bg-orange-50/30 transition-colors group"
+                >
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-xs font-bold">L</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 group-hover:text-orange-600 transition-colors">Libby</p>
+                    <p className="text-xs text-gray-400">Ebooks & audiobooks</p>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-300 group-hover:text-orange-400 transition-colors">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                    <polyline points="15,3 21,3 21,9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                </a>
+              )}
+
+              {/* Hoopla */}
+              {book.materialType !== "DVD" && (
+                <a
+                  href={`https://www.hoopladigital.com/search?q=${encodeURIComponent(book.title)}&scope=everything&type=direct`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-lg bg-white border border-gray-100 p-3 hover:border-purple-200 hover:bg-purple-50/30 transition-colors group"
+                >
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-xs font-bold">H</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 group-hover:text-purple-600 transition-colors">Hoopla</p>
+                    <p className="text-xs text-gray-400">Stream or borrow instantly</p>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-300 group-hover:text-purple-400 transition-colors">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                    <polyline points="15,3 21,3 21,9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                </a>
+              )}
+            </div>
+          </div>
 
           {/* Hold status message */}
           {holdMessage && (

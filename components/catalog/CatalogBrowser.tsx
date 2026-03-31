@@ -5,7 +5,10 @@ import Image from "next/image";
 import { type Genre } from "@/lib/catalog/books";
 import BookDetailPanel, { type BookInfo } from "@/components/catalog/BookDetailPanel";
 
-const GENRES: (Genre | "Spanish")[] = ["Fiction", "Mystery", "Sci-Fi", "Biography", "Kids", "Teens", "Nonfiction", "Spanish"];
+const GENRES: (Genre | "Spanish" | "Graphic Novels")[] = [
+  "Fiction", "Mystery", "Sci-Fi", "Biography", "Kids", "Teens",
+  "Early Childhood", "Graphic Novels", "Nonfiction", "Spanish",
+];
 
 interface CatalogBook {
   id: number;
@@ -20,6 +23,10 @@ interface CatalogBook {
   publisher: string | null;
   pages: number | null;
   openLibraryKey: string | null;
+  available: number | null;
+  totalCopies: number | null;
+  materialType: string | null;
+  callNumber: string | null;
 }
 
 // ---------- Genre Filter Pills ----------
@@ -124,6 +131,10 @@ function toBookInfo(book: CatalogBook): BookInfo {
     description: book.description || undefined,
     genre: book.genre,
     openLibraryKey: book.openLibraryKey || undefined,
+    available: book.available,
+    totalCopies: book.totalCopies,
+    materialType: book.materialType,
+    callNumber: book.callNumber,
   };
 }
 
